@@ -1,67 +1,124 @@
-import asyncio
 import logging
+import os
+from typing import Any
 
-from fastapi import FastAPI
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
-from azure.cosmos.aio import CosmosClient
-from azure.cosmos import PartitionKey, exceptions
-from dotenv import dotenv_values
+from gremlin_python.driver.client import Client
+from gremlin_python.driver.serializer import GraphSONSerializersV2d0
 
-# Logger
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-config = dotenv_values(".env")
-DB_NAME="todo-db"
-CONTAINER_NAME="todo-items"
+load_dotenv()
 
-# FASTAPI app
+FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
+GREMLIN_ENDPOINT = os.getenv("GREMLIN_ENDPOINT", "")
+GREMLIN_DATABASE = os.getenv("GREMLIN_DATABASE", "ivy-db")
+GREMLIN_GRAPH = os.getenv("GREMLIN_GRAPH", "storygraph")
+GREMLIN_KEY = os.getenv("GREMLIN_KEY", "")
+PORT = os.getenv("PORT", "8000")
+
+
+def _get_gremlin_username(database: str, graph: str) -> str:
+    return f"/dbs/{database}/colls/{graph}"
+
+
 app = FastAPI(title="ivy")
 app.add_middleware(
-    CORSMiddleware,  # type: ignore[ arg-type ]
-    allow_origins=[config["FRONTEND_ORIGIN"]],
+    CORSMiddleware,
+    allow_origins=[FRONTEND_ORIGIN],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-def _log_task_exception(task: "asyncio.Task[None]", job_id: str) -> None:
-    try:
-        task.result()
-    except Exception:
-        logger.exception("[job:%s] Indexing job failed", job_id)
+
+def _is_gremlin_configured() -> bool:
+    return bool(GREMLIN_ENDPOINT and GREMLIN_KEY)
+
+
+def _build_gremlin_client() -> Client:
+    return Client(
+        GREMLIN_ENDPOINT,
+        "g",
+        username=_get_gremlin_username(GREMLIN_DATABASE, GREMLIN_GRAPH),
+        password=GREMLIN_KEY,
+        message_serializer=GraphSONSerializersV2d0(),
+    )
+
 
 @app.on_event("startup")
-async def startup_db_client():
-    app.cosmos_client = CosmosClient(config["URI"], credential = config["KEY"])
-    await get_or_create_db(DB_NAME)
-    await get_or_create_container(CONTAINER_NAME)
+async def startup_gremlin_client() -> None:
+    if not _is_gremlin_configured():
+        logger.warning("Gremlin not configured. Set GREMLIN_ENDPOINT and GREMLIN_KEY.")
+        app.state.gremlin_client = None
+        return
 
-async def get_or_create_db(db_name):
+    app.state.gremlin_client = _build_gremlin_client()
+    logger.info("Gremlin client initialized for db=%s graph=%s", GREMLIN_DATABASE, GREMLIN_GRAPH)
+
+
+@app.on_event("shutdown")
+async def shutdown_gremlin_client() -> None:
+    gremlin_client: Client | None = getattr(app.state, "gremlin_client", None)
+    if gremlin_client is not None:
+        gremlin_client.close()
+        logger.info("Closed Gremlin client connection")
+
+
+def _run_query_sync(gremlin_client: Client, query: str) -> list[Any]:
+    result_set = gremlin_client.submit(query)
+    return result_set.all().result()
+
+
+async def run_query(query: str) -> list[Any]:
+    gremlin_client: Client | None = getattr(app.state, "gremlin_client", None)
+    if gremlin_client is None:
+        raise HTTPException(status_code=503, detail="Gremlin client is not configured")
+    return await run_in_threadpool(_run_query_sync, gremlin_client, query)
+
+
+@app.get("/health")
+async def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/health/ready")
+async def readiness() -> dict[str, Any]:
+    if not _is_gremlin_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="Gremlin env vars missing (GREMLIN_ENDPOINT, GREMLIN_KEY)",
+        )
+
     try:
-        app.database = app.cosmos_client.get_database_client(db_name)
-        return await app.database.read()
-    except exceptions.CosmosResourceNotFoundError:
-        print("Creating Database")
-        return await app.cosmos_client.create_database(db_name)
-        
-async def get_or_create_container(container_name):
-    try:        
-        app.todo_items_container = app.database.get_container_client(container_name)
-        return await app.todo_items_container.read()   
-    except exceptions.CosmosResourceNotFoundError:
-        print("Creating container with id as partition key")
-        return await app.database.create_container(id=container_name, partition_key=PartitionKey(path="/id"))
-    except exceptions.CosmosHttpResponseError:
-        raise
+        result = await run_query("g.V().limit(1).count()")
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=f"Gremlin not ready: {exc}") from exc
+
+    return {
+        "status": "ready",
+        "database": GREMLIN_DATABASE,
+        "graph": GREMLIN_GRAPH,
+        "vertex_count_probe": result,
+    }
+
+
+@app.get("/")
+async def root() -> dict[str, str]:
+    return {"message": "ivy backend is running"}
+
 
 if __name__ == "__main__":
     import uvicorn
 
     try:
-        port_value = int(config["PORT"]) if config["PORT"] is not None else 8000
+        port_value = int(PORT)
     except ValueError:
         port_value = 8000
     uvicorn.run(app, host="0.0.0.0", port=port_value)
