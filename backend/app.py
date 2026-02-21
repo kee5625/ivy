@@ -7,8 +7,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from backend.services.indexing import run_indexing_job
-
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -17,7 +15,7 @@ logger.setLevel(logging.INFO)
 frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
 PORT = os.getenv("PORT")
 
-app = FastAPI(title="the search thing")
+app = FastAPI(title="ivy")
 
 app.add_middleware(
     CORSMiddleware,  # type: ignore[ arg-type ]
