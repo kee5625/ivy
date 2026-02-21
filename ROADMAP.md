@@ -1,33 +1,16 @@
-# StoryGraph AI - Hackathon Roadmap
-
-**Current Stack**: FastAPI + Next.js + Tailwind  
-**Goal**: Multi-agent narrative analysis with graph visualization  
-**Target Categories**: Best Azure Integration | Best Multi-Agent System | Best Use of Microsoft Foundry | Grand Prize
+# Ivy Roadmap
 
 ---
 
 ## Week 1: Database Decision + Azure Foundation
 
-### Goal
-Choose graph database, set up Azure infrastructure, deploy initial stack
-
-### Database Decision Matrix
-
-| Option | Pros | Cons | Azure Points |
-|--------|------|------|--------------|
-| **Cosmos DB Gremlin** | Native Azure, managed service, scales infinitely | Gremlin query learning curve, more verbose | ⭐⭐⭐⭐⭐ |
-| **Neo4j Aura** | Best graph UX, Cypher is intuitive, great docs | Third-party service, fewer Azure points | ⭐⭐ |
-| **Azure PostgreSQL + AGE** | SQL familiarity, open source | Still in preview, less mature | ⭐⭐⭐ |
-
-**Recommendation**: Cosmos DB Gremlin (maximize Azure Integration score)
-
 ### Tasks
-- [ ] Create Azure resource group
-- [ ] Deploy Azure Cosmos DB (Gremlin API)
-- [ ] Create Azure Blob Storage container (for PDFs)
-- [ ] Deploy Azure OpenAI Service
-- [ ] Connect FastAPI to Cosmos DB
-- [ ] Deploy frontend and backend to Azure
+- [X] Create Azure resource group
+- [X] Deploy Azure Cosmos DB (Gremlin API)
+- [X] Create Azure Blob Storage container (for PDFs)
+- [X] Deploy Azure OpenAI Service
+- [X] Connect FastAPI to Cosmos DB
+- [X] Deploy frontend and backend to Azure
 
 ### Deployment Options
 
@@ -60,17 +43,6 @@ Choose graph database, set up Azure infrastructure, deploy initial stack
 **Cons**: Less "production" feel, Functions have timeouts
 
 **Verdict**: Start with Option B for Week 1-2, migrate to Option A in Week 5 if time permits
-
-### Tools & One-Liners
-
-| Tool | One-Line Explanation |
-|------|---------------------|
-| Azure Cosmos DB (Gremlin) | Cloud graph database storing characters as nodes and relationships as edges |
-| Azure Blob Storage | Dropbox for uploaded PDFs |
-| Azure OpenAI | The AI brain that reads and understands stories |
-| Azure Container Apps | Docker hosting without server management |
-| Azure Static Web Apps | Free hosting for Next.js with automatic deployments |
-| Azure Functions | Run code without managing servers (pay per execution) |
 
 ---
 
