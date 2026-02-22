@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import axios from 'axios'
 
 export default function App() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -11,6 +12,20 @@ export default function App() {
     const mb = selectedFile.size / (1024 * 1024);
     return `${mb.toFixed(2)} MB`;
   }, [selectedFile]);
+  
+  const handleFileSubmit = async () => {
+    if (!selectedFile) {
+      alert("Please upload a PDF before submitting");
+      return;
+    }
+    try {
+      const response = await axios.post("/api/pdf", selectedFile);
+      
+      alert("File uplaoded successfully!");
+    } catch (e) {
+      alert("failed to upload file.");
+    }
+  };
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-gradient-to-b from-[#f4fbf1] via-[#fbfef9] to-[#f5faf3] px-5 py-10 text-[#2f503d] sm:px-8 lg:px-12">
@@ -80,6 +95,7 @@ export default function App() {
 
           <button
             type="button"
+            onClick={handleFileSubmit}
             className="mt-6 w-full rounded-xl bg-[#4f8957] px-5 py-3 text-sm font-semibold tracking-wide text-white transition hover:bg-[#42774a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#94c596] focus-visible:ring-offset-2"
           >
             Upload PDF

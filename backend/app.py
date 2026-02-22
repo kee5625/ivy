@@ -16,7 +16,7 @@ logger.setLevel(logging.INFO)
 
 load_dotenv()
 
-FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
+FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
 GREMLIN_ENDPOINT = os.getenv("GREMLIN_ENDPOINT", "")
 GREMLIN_DATABASE = os.getenv("GREMLIN_DATABASE", "ivy-db")
 GREMLIN_GRAPH = os.getenv("GREMLIN_GRAPH", "storygraph")
