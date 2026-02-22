@@ -1,8 +1,6 @@
-"use client";
-
 import { useMemo, useState } from "react";
 
-export default function Home() {
+export default function App() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   const fileSize = useMemo(() => {
