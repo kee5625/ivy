@@ -123,8 +123,7 @@ async def root() -> dict[str, str]:
 @app.post("/pdf/parse")
 async def parse_pdf(file: UploadFile = File(...)) -> dict[str, object]:
     return {
-        "status": "ok",
-        "data": parsed,
+        "status": "ok"
     }
 
 
