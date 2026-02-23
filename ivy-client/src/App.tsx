@@ -22,17 +22,13 @@ export default function App() {
 
     const formData = new FormData();
     formData.append("file", selectedFile);
-    formData.append("original_filename", selectedFile.name);
-    formData.append("file_size", String(selectedFile.size));
-    formData.append("mime_type", selectedFile.type || "application/pdf");
-
+    
     try {
       setIsUploading(true);
       const response = await axios.post("/api/pdf/parse", formData);
-      const uploadedName = response.data?.data?.filename ?? selectedFile.name;
-      const chunkCount = response.data?.data?.chunks?.length ?? 0;
+      const uploadedName = response.data?.blob_name ?? selectedFile.name;
 
-      alert(`Uploaded ${uploadedName} successfully (${chunkCount} chunks).`);
+      alert(`Uploaded ${uploadedName} successfully.`);
     } catch (e) {
       alert("Failed to upload file.");
     } finally {
