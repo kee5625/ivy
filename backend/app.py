@@ -3,11 +3,13 @@ import os
 from typing import Any
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from gremlin_python.driver.client import Client
 from gremlin_python.driver.serializer import GraphSONSerializersV2d0
+
+from parse.parse import parse_pdf_bytes
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
@@ -60,7 +62,9 @@ async def startup_gremlin_client() -> None:
         return
 
     app.state.gremlin_client = _build_gremlin_client()
-    logger.info("Gremlin client initialized for db=%s graph=%s", GREMLIN_DATABASE, GREMLIN_GRAPH)
+    logger.info(
+        "Gremlin client initialized for db=%s graph=%s", GREMLIN_DATABASE, GREMLIN_GRAPH
+    )
 
 
 @app.on_event("shutdown")
@@ -99,7 +103,9 @@ async def readiness() -> dict[str, Any]:
     try:
         result = await run_query("g.V().limit(1).count()")
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Gremlin not ready: {exc}") from exc
+        raise HTTPException(
+            status_code=503, detail=f"Gremlin not ready: {exc}"
+        ) from exc
 
     return {
         "status": "ready",
@@ -112,6 +118,29 @@ async def readiness() -> dict[str, Any]:
 @app.get("/")
 async def root() -> dict[str, str]:
     return {"message": "ivy backend is running"}
+
+
+@app.post("/pdf/parse")
+async def parse_pdf(file: UploadFile = File(...)) -> dict[str, object]:
+    if file.content_type not in {"application/pdf", "application/octet-stream"}:
+        raise HTTPException(status_code=415, detail="Only PDF uploads are supported")
+
+    pdf_bytes = await file.read()
+    if not pdf_bytes:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
+    try:
+        parsed = parse_pdf_bytes(pdf_bytes, filename=file.filename)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("PDF parse failed")
+        raise HTTPException(status_code=500, detail="Failed to parse PDF") from exc
+
+    return {
+        "status": "ok",
+        "data": parsed,
+    }
 
 
 if __name__ == "__main__":

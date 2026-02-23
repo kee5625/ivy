@@ -3,6 +3,7 @@ import axios from 'axios'
 
 export default function App() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   const fileSize = useMemo(() => {
     if (!selectedFile) {
@@ -18,12 +19,24 @@ export default function App() {
       alert("Please upload a PDF before submitting");
       return;
     }
+
+    const formData = new FormData();
+    formData.append("file", selectedFile);
+    formData.append("original_filename", selectedFile.name);
+    formData.append("file_size", String(selectedFile.size));
+    formData.append("mime_type", selectedFile.type || "application/pdf");
+
     try {
-      const response = await axios.post("/api/pdf", selectedFile);
-      
-      alert("File uplaoded successfully!");
+      setIsUploading(true);
+      const response = await axios.post("/api/pdf/parse", formData);
+      const uploadedName = response.data?.data?.filename ?? selectedFile.name;
+      const chunkCount = response.data?.data?.chunks?.length ?? 0;
+
+      alert(`Uploaded ${uploadedName} successfully (${chunkCount} chunks).`);
     } catch (e) {
-      alert("failed to upload file.");
+      alert("Failed to upload file.");
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -96,9 +109,10 @@ export default function App() {
           <button
             type="button"
             onClick={handleFileSubmit}
+            disabled={!selectedFile || isUploading}
             className="mt-6 w-full rounded-xl bg-[#4f8957] px-5 py-3 text-sm font-semibold tracking-wide text-white transition hover:bg-[#42774a] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#94c596] focus-visible:ring-offset-2"
           >
-            Upload PDF
+            {isUploading ? "Uploading..." : "Upload PDF"}
           </button>
         </section>
       </main>
