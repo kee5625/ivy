@@ -131,6 +131,7 @@ async def parse_pdf(file: UploadFile = File(...)) -> dict[str, object]:
 
     try:
         uploaded = upload_pdf_bytes(pdf_bytes, filename=file.filename)
+        logger.info("Upload result: %s", uploaded)
     except (TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:

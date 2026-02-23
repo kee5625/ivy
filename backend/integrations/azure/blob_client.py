@@ -26,13 +26,13 @@ def create_blob_service_client() -> BlobServiceClient | None:
         return BlobServiceClient.from_connection_string(connection_string)
 
     account_url = os.getenv("AZURE_STORAGE_ACCOUNT_URL")
-    account_key = os.getenv("AZURE_STORAGE_ACCOUNT_KEY")
+    #account_key = os.getenv("AZURE_STORAGE_ACCOUNT_KEY")
     credential = DefaultAzureCredential()
     
     if not account_url:
         return None
 
-    if account_key:
+    if credential:
         return BlobServiceClient(account_url=account_url, credential=credential)
     return BlobServiceClient(account_url=account_url)
 
