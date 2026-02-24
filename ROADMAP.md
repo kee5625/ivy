@@ -388,6 +388,120 @@ By end of hackathon:
 
 ---
 
+## 📂 Suggested Project Structure
+
+    ivy/
+      ROADMAP.md
+      docker-compose.yml
+      .github/workflows/
+
+      backend/
+        app/
+          __init__.py
+          main.py                     # FastAPI app entry point
+          config.py                   # Environment config (pydantic-settings)
+          dependencies.py             # Shared DI (clients from app.state)
+
+          api/
+            __init__.py
+            routes/
+              __init__.py
+              health.py
+              documents.py            # Upload + job creation
+              jobs.py                 # Job status/progress/results
+              graph.py                # Graph query endpoints
+              search.py               # AI Search query endpoints
+            schemas/
+              __init__.py
+              documents.py
+              jobs.py
+              graph.py
+              search.py
+
+          services/
+            __init__.py
+            ingestion_service.py      # Upload -> Blob -> parse trigger
+            parse_service.py          # PDF extraction/chunking
+            extraction_service.py     # Foundry/OpenAI extraction
+            graph_service.py          # Cosmos graph writes/reads
+            scoring_service.py        # Consistency score, plot holes
+            whatif_service.py         # What-if propagation logic
+
+          agents/
+            __init__.py
+            orchestrator.py
+            base_agent.py
+            ingestion_agent.py
+            entity_agent.py
+            timeline_agent.py
+            relationship_agent.py
+            plot_hole_agent.py
+
+          integrations/
+            __init__.py
+            azure/
+              __init__.py
+              blob_client.py          # BlobServiceClient lifecycle
+              blob_repository.py      # Upload/download helpers
+              openai_client.py
+              ai_search_client.py
+            cosmos/
+              __init__.py
+              gremlin_client.py
+              graph_repository.py
+
+          domain/
+            __init__.py
+            models/
+              __init__.py
+              document.py
+              entity.py
+              event.py
+              relationship.py
+              job.py
+
+          utils/
+            __init__.py
+            logging.py
+
+          tests/
+            __init__.py
+            unit/
+            integration/
+
+        pyproject.toml
+        .env.example
+
+      ivy-client/
+        src/
+          app/
+            pages/
+              UploadPage.tsx
+              JobStatusPage.tsx
+              GraphPage.tsx
+            components/
+              upload/
+              graph/
+              jobs/
+            api/
+              documents.ts
+              jobs.ts
+              graph.ts
+              search.ts
+            hooks/
+              useUpload.ts
+              useJobPolling.ts
+            types/
+              api.ts
+              graph.ts
+          main.tsx
+          style.css
+
+        package.json
+        vite.config.ts
+
+---
+
 ## 📝 Submission Checklist
 
 - [ ] Working project deployed to Azure
