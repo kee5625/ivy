@@ -52,9 +52,9 @@
 PDF → Structured Data → Graph using Microsoft Foundry
 
 ### Tasks
-- [ ] Upload PDF endpoint → Blob Storage
+- [X] Upload PDF endpoint → Blob Storage
 - [ ] Parse PDF text (PyPDF2 or pdfplumber)
-- [ ] Set up Microsoft Foundry project
+- [X] Set up Microsoft Foundry project
 - [ ] Create extraction prompt templates in Foundry
 - [ ] Extract core entities:
   - Characters (name, description, first appearance)
