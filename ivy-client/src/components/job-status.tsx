@@ -1,11 +1,5 @@
 import React from 'react';
-
-interface JobStatusProps {
-    jobId: string;
-    status: 'pending' | 'running' | 'completed' | 'failed';
-    progress?: number;
-    message?: string;
-}
+import type { JobStatusProps } from '@/types/types';
 
 export const JobStatus: React.FC<JobStatusProps> = ({
     jobId,
