@@ -1,5 +1,5 @@
 import { useParams } from "react-router-dom";
-import type { JobStatusProps } from '@/types/types';
+import type { JobStatusProps } from '@/types/graph';
 import { JobStatus } from "@/components/job-status";
 import { useState } from "react";
 

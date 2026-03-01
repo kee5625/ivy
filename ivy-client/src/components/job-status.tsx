@@ -1,5 +1,5 @@
 import React from 'react';
-import type { JobStatusProps } from '@/types/types';
+import type { JobStatusProps } from '@/types/graph';
 
 export const JobStatus: React.FC<JobStatusProps> = ({
     jobId,
