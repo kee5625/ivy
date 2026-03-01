@@ -2,6 +2,12 @@ from pypdf import PdfReader
 
 reader = PdfReader("test Orient.pdf")
 page = reader.pages[0]
+
+def visitor_body(text, cm, tm, font_dict, font_size):
+    y = tm[5]
+    if 50 < y < 720 or y == 0:
+        parts.append(text)
+
 print(page.extract_text())
 
 # extract only text oriented up
