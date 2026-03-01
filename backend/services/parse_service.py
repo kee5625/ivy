@@ -1,4 +1,5 @@
 from pypdf import PdfReader
+import svgwrite
 
 reader = PdfReader("test Orient.pdf")
 page = reader.pages[0]
