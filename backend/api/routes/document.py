@@ -4,11 +4,8 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from integrations.azure.blob_repository import upload_pdf_bytes
 
-
 logger = logging.getLogger(__name__)
-
 router = APIRouter(tags=["documents"])
-
 
 @router.post("/pdf/parse")
 async def parse_pdf(file: UploadFile = File(...)) -> dict[str, object]:
