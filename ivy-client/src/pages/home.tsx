@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import axios from 'axios'
 
 export default function Home() {
+  const navigate = useNavigate();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
@@ -26,9 +28,10 @@ export default function Home() {
     try {
       setIsUploading(true);
       const response = await axios.post("/api/pdf/parse", formData);
-      const uploadedName = response.data?.blob_name ?? selectedFile.name;
+      const jobId = response.data?.job_id ?? selectedFile.name;
 
-      alert(`Uploaded ${uploadedName} successfully.`);
+      // Navigate to the graph page with the job ID
+      navigate(`/graph/${jobId}`);
     } catch (e) {
       alert("Failed to upload file.");
     } finally {
