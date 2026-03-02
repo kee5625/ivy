@@ -46,22 +46,35 @@
 
 ---
 
+## Product Priorities (Updated)
+
+1. **Story Timeline First (MVP)**
+   - Show chapter-by-chapter summaries and key events in order.
+2. **Character Linkage Second**
+   - Show character co-occurrence and relationship context from the timeline.
+3. **Plot Hole Detection Third**
+   - Run consistency checks only after timeline + character linkage are reliable.
+
+---
+
 ## Week 2: Single-Agent Extraction Pipeline
 
 ### Goal
-PDF → Structured Data → Graph using Microsoft Foundry
+PDF (Blob) -> Parse + Chunk -> Timeline output using Microsoft Foundry/OpenAI
 
 ### Tasks
 - [X] Upload PDF endpoint → Blob Storage
-- [ ] Parse PDF text (PyPDF2 or pdfplumber)
+- [ ] Pull PDF bytes from Blob Storage in backend worker/service
+- [ ] Parse PDF text (pdfplumber primary, PyPDF2 fallback)
+- [ ] Detect chapters and create chunking strategy
 - [X] Set up Microsoft Foundry project
-- [ ] Create extraction prompt templates in Foundry
-- [ ] Extract core entities:
-  - Characters (name, description, first appearance)
-  - Locations (name, description)
-  - Events (description, timestamp, participants)
-- [ ] Store in Cosmos DB as graph structure
-- [ ] Build basic graph visualization page
+- [ ] Create timeline extraction prompt templates in Foundry
+- [ ] Extract timeline outputs:
+  - Chapter summary (3-5 bullets)
+  - Key events per chapter
+  - Global event ordering
+- [ ] Store timeline results + job status in Cosmos DB
+- [ ] Build basic timeline visualization page
 
 ### Foundry Workflow Design
 ```
@@ -69,9 +82,9 @@ PDF Upload
   ↓
 [Foundry Pipeline]
   ├─ Step 1: Text Extraction
-  ├─ Step 2: Entity Recognition (GPT-4o)
-  ├─ Step 3: Relationship Mapping
-  └─ Step 4: Graph Storage
+  ├─ Step 2: Chapter Detection + Chunking
+  ├─ Step 3: Timeline Extraction (GPT-4o/GPT-4o-mini)
+  └─ Step 4: Persist Timeline + Job State
   ↓
 Cosmos DB
 ```
@@ -88,7 +101,7 @@ Cosmos DB
 ## Week 3: Multi-Agent System (5 Agents)
 
 ### Goal
-Build true multi-agent orchestration using Microsoft Agent Framework
+Character linkage layer + optional multi-agent orchestration with Microsoft Agent Framework
 
 ### Agent Architecture
 
@@ -164,15 +177,15 @@ All agents read/write to shared state in Cosmos DB:
 ```
 
 ### Tasks
-- [ ] Set up Microsoft Agent Framework
-- [ ] Implement agent orchestrator (manages agent flow)
-- [ ] **Ingestion Agent**: PDF parsing, chapter detection, chunking strategy
-- [ ] **Entity Agent**: Character/location/object extraction with confidence scores
-- [ ] **Timeline Agent**: Event extraction, temporal ordering, time reference resolution
-- [ ] **Relationship Agent**: Build graph edges (who knows who, who was where)
-- [ ] **Plot Hole Agent**: Cross-reference all data, detect inconsistencies
-- [ ] Implement agent-to-agent messaging via Cosmos DB state
-- [ ] Build agent status dashboard in frontend
+- [ ] Extract characters from timeline-aware chunks with confidence scores
+- [ ] Resolve aliases (same character with different names)
+- [ ] Build character linkage model:
+  - Character-to-character interactions
+  - Character-to-event participation
+  - Character chapter presence map
+- [ ] Persist character linkage results in Cosmos DB
+- [ ] Build character linkage visualization in frontend
+- [ ] (Optional stretch) Set up Agent Framework orchestrator for ingestion/entity/timeline/relationship flow
 
 ### Tools & One-Liners
 
@@ -185,7 +198,7 @@ All agents read/write to shared state in Cosmos DB:
 ## Week 4: Intelligence Layer + Azure AI Search
 
 ### Goal
-Advanced reasoning, semantic search, and model optimization
+Plot hole detection + advanced reasoning on top of timeline and character linkage
 
 ### Tasks
 - [ ] Implement "Narrative Consistency Score" (0-100)
@@ -193,7 +206,7 @@ Advanced reasoning, semantic search, and model optimization
   - Character consistency (30%)
   - Causal chain validity (20%)
   - Setup/payoff resolution (20%)
-- [ ] Plot hole detection rules:
+- [ ] Plot hole detection rules (initially rules-first, then LLM-assisted):
   - Character appears before introduction
   - Dead character speaks
   - Timeline paradox (event A causes B, but B happens first)
@@ -361,7 +374,8 @@ Copy this for each week:
 ## 💡 Success Metrics
 
 By end of hackathon:
-- [ ] Can upload 100-page PDF and see full graph in < 2 minutes
+- [ ] Can upload 100-page PDF and see timeline + chapter summaries in < 2 minutes
+- [ ] Character linkage view is accurate enough for demo (major characters + interactions)
 - [ ] Plot hole detection finds ≥ 3 real issues in test novels
 - [ ] What-If mode propagates changes correctly
 - [ ] System deployed and accessible via public URL
