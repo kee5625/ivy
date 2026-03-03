@@ -237,7 +237,7 @@ def _chapter_number(title: str) -> int | None:
     }
 
     _num_words_pattern = "|".join(number_words.keys())
-    word_match = re.search(r"\bchapter\s+({_num_words_pattern})\b", title, re.IGNORECASE)
+    word_match = re.search(rf"\bchapter\s+({_num_words_pattern})\b", title, re.IGNORECASE)
     if word_match:
         return number_words[word_match.group(1).lower()]
 
