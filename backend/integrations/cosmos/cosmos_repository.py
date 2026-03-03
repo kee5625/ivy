@@ -53,6 +53,22 @@ def _get_container():
 # job related
 
 def create_job(blob_name: str) -> str:
+    job_id = uuid4().hex
+    container = _get_container()
+    container.upsert_item({
+        "id": job_id,
+        "job_id": job_id,
+        "type": "job",
+        "status": "pending",
+        "current_agent": "ingestion_agent",
+        "blob_name": blob_name,
+        "completed_agents": [],
+        "error": None,
+        "created_at": _now(),
+        "updated_at": _now(),
+    })
+    return job_id
+    
     
 def update_job_status(
     job_id: str,
