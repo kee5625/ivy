@@ -12,86 +12,40 @@
 - [X] Connect FastAPI to Cosmos DB
 - [X] Deploy frontend and backend to Azure
 
-### Deployment Options
+---
 
-#### Option A: Azure Container Apps (Recommended for Production Feel)
-**Best for**: Full control, microservices architecture, better for Grand Prize
+## Product Priorities
 
-| Component | Service | Why |
-|-----------|---------|-----|
-| Frontend | Azure Container Apps | Docker container with Next.js |
-| Backend | Azure Container Apps | Docker container with FastAPI |
-| Database | Cosmos DB Gremlin | Managed graph database |
-| Storage | Blob Storage | PDF uploads |
-| AI | Azure OpenAI | GPT-4o + embeddings |
-
-**Pros**: Shows production architecture, scaling, environment variables  
-**Cons**: More complex setup, Docker knowledge required
-
-#### Option B: Azure Static Web Apps + Functions (Faster Setup)
-**Best for**: Quick deployment, serverless, lower complexity
-
-| Component | Service | Why |
-|-----------|---------|-----|
-| Frontend | Static Web Apps | Next.js export, automatic HTTPS |
-| Backend | Azure Functions | Serverless FastAPI with Functions integration |
-| Database | Cosmos DB Gremlin | Same as Option A |
-| Storage | Blob Storage | Same as Option A |
-| AI | Azure OpenAI | Same as Option A |
-
-**Pros**: Simpler deployment, free tier, faster cold starts  
-**Cons**: Less "production" feel, Functions have timeouts
-
-**Verdict**: Start with Option B for Week 1-2, migrate to Option A in Week 5 if time permits
+1. **Story Timeline First (MVP)**
+   - Show chapter-by-chapter summaries and key events in order.
+2. **Character Linkage Second**
+   - Show character co-occurrence and relationship context from the timeline.
+3. **Plot Hole Detection Third**
+   - Run consistency checks only after timeline + character linkage are reliable.
 
 ---
 
 ## Week 2: Single-Agent Extraction Pipeline
 
-### Goal
-PDF → Structured Data → Graph using Microsoft Foundry
-
 ### Tasks
 - [X] Upload PDF endpoint → Blob Storage
-- [ ] Parse PDF text (PyPDF2 or pdfplumber)
+- [ ] Pull PDF bytes from Blob Storage in backend worker/service
+- [ ] Parse PDF text (pdfplumber primary, PyPDF2 fallback)
+- [ ] Detect chapters and create chunking strategy
 - [X] Set up Microsoft Foundry project
-- [ ] Create extraction prompt templates in Foundry
-- [ ] Extract core entities:
-  - Characters (name, description, first appearance)
-  - Locations (name, description)
-  - Events (description, timestamp, participants)
-- [ ] Store in Cosmos DB as graph structure
-- [ ] Build basic graph visualization page
-
-### Foundry Workflow Design
-```
-PDF Upload
-  ↓
-[Foundry Pipeline]
-  ├─ Step 1: Text Extraction
-  ├─ Step 2: Entity Recognition (GPT-4o)
-  ├─ Step 3: Relationship Mapping
-  └─ Step 4: Graph Storage
-  ↓
-Cosmos DB
-```
-
-### Tools & One-Liners
-
-| Tool | One-Line Explanation |
-|------|---------------------|
-| Microsoft Foundry | Mission control for managing AI workflows and prompts |
-| Azure OpenAI | Extracts structured story data from unstructured text |
+- [ ] Create timeline extraction prompt templates in Foundry
+- [ ] Extract timeline outputs:
+  - Chapter summary (3-5 bullets)
+  - Key events per chapter
+  - Global event ordering
+- [ ] Store timeline results + job status in Cosmos DB
+- [ ] Build basic timeline visualization page
 
 ---
 
 ## Week 3: Multi-Agent System (5 Agents)
 
-### Goal
-Build true multi-agent orchestration using Microsoft Agent Framework
-
 ### Agent Architecture
-
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    User Uploads PDF                          │
@@ -164,28 +118,19 @@ All agents read/write to shared state in Cosmos DB:
 ```
 
 ### Tasks
-- [ ] Set up Microsoft Agent Framework
-- [ ] Implement agent orchestrator (manages agent flow)
-- [ ] **Ingestion Agent**: PDF parsing, chapter detection, chunking strategy
-- [ ] **Entity Agent**: Character/location/object extraction with confidence scores
-- [ ] **Timeline Agent**: Event extraction, temporal ordering, time reference resolution
-- [ ] **Relationship Agent**: Build graph edges (who knows who, who was where)
-- [ ] **Plot Hole Agent**: Cross-reference all data, detect inconsistencies
-- [ ] Implement agent-to-agent messaging via Cosmos DB state
-- [ ] Build agent status dashboard in frontend
-
-### Tools & One-Liners
-
-| Tool | One-Line Explanation |
-|------|---------------------|
-| Microsoft Agent Framework | A team of 5 AI specialists passing notes through a shared database |
+- [ ] Extract characters from timeline-aware chunks with confidence scores
+- [ ] Resolve aliases (same character with different names)
+- [ ] Build character linkage model:
+  - Character-to-character interactions
+  - Character-to-event participation
+  - Character chapter presence map
+- [ ] Persist character linkage results in Cosmos DB
+- [ ] Build character linkage visualization in frontend
+- [ ] (Optional stretch) Set up Agent Framework orchestrator for ingestion/entity/timeline/relationship flow
 
 ---
 
 ## Week 4: Intelligence Layer + Azure AI Search
-
-### Goal
-Advanced reasoning, semantic search, and model optimization
 
 ### Tasks
 - [ ] Implement "Narrative Consistency Score" (0-100)
@@ -193,7 +138,7 @@ Advanced reasoning, semantic search, and model optimization
   - Character consistency (30%)
   - Causal chain validity (20%)
   - Setup/payoff resolution (20%)
-- [ ] Plot hole detection rules:
+- [ ] Plot hole detection rules (initially rules-first, then LLM-assisted):
   - Character appears before introduction
   - Dead character speaks
   - Timeline paradox (event A causes B, but B happens first)
@@ -214,19 +159,9 @@ Advanced reasoning, semantic search, and model optimization
   - Text-embedding-3-small: Vector search
 - [ ] Create evaluation pipeline in Foundry for output quality
 
-### Tools & One-Liners
-
-| Tool | One-Line Explanation |
-|------|---------------------|
-| Azure AI Search | Google for your story that understands "find betrayal scenes" |
-| Microsoft Foundry (Routing) | Smart traffic controller sending easy tasks to cheap AI, hard tasks to smart AI |
-
 ---
 
 ## Week 5: Polish + Demo Preparation
-
-### Goal
-Production quality, stunning demo, winning submission
 
 ### Tasks
 - [ ] Interactive graph visualization
@@ -260,118 +195,34 @@ Production quality, stunning demo, winning submission
   - Setup instructions
   - Copilot usage documentation (what it helped write)
 
-### Tools & One-Liners
-
-| Tool | One-Line Explanation |
-|------|---------------------|
-| GitHub Copilot Agent Mode | Senior developer pair-programming with you, writing boilerplate and suggesting fixes |
-
 ---
 
-## 🏆 Category Winning Strategy
 
-### Best Azure Integration
-**Must-haves:**
-- ✅ Cosmos DB Gremlin (native Azure graph database)
-- ✅ Blob Storage (PDF storage)
-- ✅ Azure OpenAI (AI services)
-- ✅ Azure AI Search (semantic search)
-- ✅ Either Container Apps or Static Web Apps + Functions
-- ✅ Architecture diagram showing all services
-
-**Bonus points:**
-- Azure Key Vault for secrets
-- Azure Application Insights for monitoring
-- Azure CDN for frontend assets
-
-### Best Multi-Agent System
-**Must-haves:**
-- ✅ 5 distinct agents with clear responsibilities
-- ✅ Agent Framework orchestration
-- ✅ Real agent-to-agent communication (not just sequential calls)
-- ✅ Shared state/memory (Cosmos DB)
-- ✅ Agent status tracking and visualization
-
-**Bonus points:**
+### System
 - Agent retry logic and error handling
 - Parallel agent execution where possible
 - Agent confidence scoring
 
-### Best Use of Microsoft Foundry
-**Must-haves:**
-- ✅ Prompt management and versioning
-- ✅ Model routing (cheap vs. expensive models)
-- ✅ Evaluation pipeline for output quality
-- ✅ Structured extraction workflows
-
-**Bonus points:**
+### Microsoft Foundry
 - A/B testing different prompts
 - Custom evaluation metrics
 - Foundry deployment as managed endpoint
-
-### Grand Prize
-**Must demonstrate:**
-- ✅ Solves real problem (authors fixing plot holes)
-- ✅ Production-ready deployment
-- ✅ Novel AI application (narrative analysis)
-- ✅ Clean, maintainable architecture
-- ✅ Impressive demo with wow factor
-
----
-
-## 📋 Weekly Checklist Template
-
-Copy this for each week:
-
-```markdown
-### Week X Goals
-- [ ] Goal 1
-- [ ] Goal 2
-
-### Daily Breakdown
-**Day 1-2:** Task A  
-**Day 3-4:** Task B  
-**Day 5-6:** Task C  
-**Day 7:** Buffer/testing
-
-### Risks
-- Risk 1 and mitigation
-- Risk 2 and mitigation
-
-### Deliverables
-- [ ] Working feature X
-- [ ] Documentation update
-- [ ] Deployment verified
-```
-
----
-
-## 🚨 Risk Mitigation
-
-| Risk | Likelihood | Mitigation |
-|------|-----------|------------|
-| Cosmos DB Gremlin too complex | Medium | Start with simple node/edge queries, expand gradually; have Neo4j backup plan |
-| 5 agents too much for 5 weeks | Medium | Agents share 80% of code (only prompts differ); build base agent class first |
-| Plot hole detection doesn't work well | Low | Have fallback: manual plot hole tagging with AI suggestions |
-| Azure deployment issues | Medium | Test deployment in Week 1, not Week 5; use Azure CLI for reproducibility |
-| Demo video too long | Low | Script it, practice 3 times, trim ruthlessly |
 
 ---
 
 ## 💡 Success Metrics
 
 By end of hackathon:
-- [ ] Can upload 100-page PDF and see full graph in < 2 minutes
+- [ ] Can upload 100-page PDF and see timeline + chapter summaries in < 2 minutes
+- [ ] Character linkage view is accurate enough for demo (major characters + interactions)
 - [ ] Plot hole detection finds ≥ 3 real issues in test novels
-- [ ] What-If mode propagates changes correctly
 - [ ] System deployed and accessible via public URL
 - [ ] All 5 agents communicate correctly via shared state
-- [ ] Demo video under 2 minutes, shows full workflow
 - [ ] Code is well-documented and GitHub repo is public
 
 ---
 
-## 🛠 Tech Stack Summary
+## Tech Stack Summary
 
 | Layer | Technology |
 |-------|-----------|
@@ -388,7 +239,7 @@ By end of hackathon:
 
 ---
 
-## 📂 Suggested Project Structure
+## Suggested Project Structure
 
     ivy/
       ROADMAP.md
@@ -502,7 +353,7 @@ By end of hackathon:
 
 ---
 
-## 📝 Submission Checklist
+## Submission Checklist
 
 - [ ] Working project deployed to Azure
 - [ ] Public GitHub repository with clean code
@@ -514,7 +365,3 @@ By end of hackathon:
 - [ ] No third-party trademarks/copyrights without permission
 
 ---
-
-**Start Date**: [Fill in]  
-**Submission Deadline**: [Fill in]  
-**Current Week**: [Update as you progress]
