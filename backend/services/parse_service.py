@@ -181,14 +181,40 @@ def _find_chapter_page_bounds(
         (idx, pg) for idx, pg in chapter_entries
         if toc[idx]["level"] == chapter_level
     ]
-    last_top_chapter_idx = top_level_chapters[-1][0]
+
+    # --- NEW LOGIC: Sequence Break Detection ---
+    main_book_chapters = []
+    highest_chapter = 0
+    started = False
+
+    for idx, pg in top_level_chapters:
+        c_num = _chapter_number(toc[idx]["title"])
+        if c_num is None:
+            continue
+
+        if not started:
+            if idx == first_chapter_one_idx:
+                started = True
+            else:
+                continue  # Ignore any chapters that appear before the first Chapter 1
+
+        # If the chapter number drops (e.g., Chapter 18 -> Chapter 1), we hit a preview/excerpt.
+        if c_num < highest_chapter:
+            break
+
+        highest_chapter = max(highest_chapter, c_num)
+        main_book_chapters.append((idx, pg))
+
+    last_top_chapter_idx = main_book_chapters[-1][0]
+    # -------------------------------------------
 
     # Walk forward past any sub-entries of the last chapter;
-    # stop at the first same-or-higher-level entry (back matter, index, etc.)
+    # stop at the first same-or-higher-level entry (back matter, preview, index, etc.)
     end_page = total_pages
     for i in range(last_top_chapter_idx + 1, len(toc)):
         if toc[i]["level"] > chapter_level:
             continue  # skip sub-sections of the last chapter
+        
         page_num = toc[i]["page_num"]
         if isinstance(page_num, int):
             end_page = page_num
