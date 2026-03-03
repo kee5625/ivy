@@ -23,19 +23,24 @@ def send_chunks(blob_name: str) -> dict[str, object]:
 def parse_and_clean(pdf_bytes: bytes) -> dict[str, object]:
     with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
         toc = extract_toc(pdf)
-        
+
         if not toc:
             return {"error": "No table of contents found in the PDF."}
-        
-        start_page = toc[0]["page_num"]
-        
+
+        chapter_bounds = _find_chapter_page_bounds(toc, len(pdf.pages))
+        if chapter_bounds:
+            start_page, end_page = chapter_bounds
+        else:
+            start_page = _find_first_content_page(toc)
+            end_page = len(pdf.pages)
+
         if isinstance(start_page, int):
             text_chunks = []
-            for i in range(start_page, len(pdf.pages)):
+            for i in range(start_page, end_page):
                 page_text = pdf.pages[i].extract_text()
                 if page_text:
                     text_chunks.append(page_text)
-            
+
             full_text = "\n".join(text_chunks)
         else:
             full_text = ""
@@ -50,68 +55,79 @@ def parse_and_clean(pdf_bytes: bytes) -> dict[str, object]:
 def extract_section_text(pdf: pdfplumber.pdf.PDF, toc: list[Bookmark], index: int) -> str:
     """Helper to extract text from a specific TOC section until the next section begins."""
     start_page = toc[index]["page_num"]
-    
-    # If the page number is unresolved, we can't extract the text
+
     if not isinstance(start_page, int):
         return ""
-        
+
     end_page = len(pdf.pages)
-    
-    # If this isn't the last chapter, end the extraction where the next chapter begins
+
     if index + 1 < len(toc):
         next_page = toc[index + 1]["page_num"]
         if isinstance(next_page, int):
             end_page = next_page
 
     text_chunks = []
-    # Use max() just in case the current and next chapter start on the exact same page
     for i in range(start_page, max(start_page + 1, end_page)):
         if i < len(pdf.pages):
             page_text = pdf.pages[i].extract_text()
             if page_text:
                 text_chunks.append(page_text)
-                
+
     return "\n".join(text_chunks)
 
 
 def extract_toc(pdf: pdfplumber.pdf.PDF) -> list[Bookmark]:
-    page_id_to_num = {page.page_obj.objid: i for i, page in enumerate(pdf.pages)}
-    
+    page_id_to_num = {}
+    for i, page in enumerate(pdf.pages):
+        page_id = _get_page_ref_id(page.page_obj)
+        if page_id is not None:
+            page_id_to_num[page_id] = i
+
     try:
         outlines = pdf.doc.get_outlines()
     except Exception:
         print("No outlines/bookmarks found in this PDF.")
         return []
-        
+
     bookmarks: list[Bookmark] = []
-    
+
     # Fixed loop variable name
     for outline in outlines:
         level, title, dest, action, se = outline
-        
+
         page_num = "Unknown"
         y_coordinate = "Unknown"
-        
+
         if dest:
             resolved_dest = resolve(dest)
-            
+
             if isinstance(resolved_dest, list) and len(resolved_dest) > 0:
                 page_ref = resolved_dest[0]
-                
-                if hasattr(page_ref, 'objid'):
-                    page_num = page_id_to_num.get(page_ref.objid, "Unknown")
-                
+
+                page_ref_id = _get_page_ref_id(page_ref)
+                if page_ref_id is not None:
+                    page_num = page_id_to_num.get(page_ref_id, "Unknown")
+
                 if len(resolved_dest) >= 4 and resolved_dest[1].name == 'XYZ':
                     y_coordinate = resolved_dest[3]
         elif action:
             resolved_action = resolve(action)
-            if isinstance(resolved_action, dict) and b'D' in resolved_action:
-                action_dest = resolve(resolved_action[b'D'])
+            if isinstance(resolved_action, dict):
+                destination = resolved_action.get(b"D", resolved_action.get("D"))
+                if destination is None:
+                    destination = resolved_action.get(b"Dest", resolved_action.get("Dest"))
+
+                if destination is not None:
+                    action_dest = resolve(destination)
+                else:
+                    action_dest = None
+
                 if isinstance(action_dest, list) and len(action_dest) > 0:
                     page_ref = action_dest[0]
-                    if hasattr(page_ref, 'objid'):
-                        page_num = page_id_to_num.get(page_ref.objid, "Unknown")
-                        
+                    page_ref_id = _get_page_ref_id(page_ref)
+                    if page_ref_id is not None:
+                        page_num = page_id_to_num.get(page_ref_id, "Unknown")
+
         bookmarks.append({
             "level": level,
             "title": title,
@@ -127,3 +143,119 @@ def _normalize_text(text: str) -> str:
     normalized = re.sub(r"-\n(?=[a-z])", "", normalized)
     normalized = re.sub(r"\n{3,}", "\n\n", normalized)
     return normalized.strip()
+
+
+def _find_chapter_page_bounds(
+    toc: list[Bookmark],
+    total_pages: int,
+) -> tuple[int, int] | None:
+    chapter_entries: list[tuple[int, int]] = []
+
+    for idx, item in enumerate(toc):
+        page_num = item["page_num"]
+        if not isinstance(page_num, int):
+            continue
+
+        if _is_front_matter_title(item["title"]):
+            continue
+
+        if _chapter_number(item["title"]) is not None:
+            chapter_entries.append((idx, page_num))
+
+    if not chapter_entries:
+        return None
+
+    first_chapter_one_idx = next((idx for idx, _ in chapter_entries if _chapter_number(toc[idx]["title"]) == 1), None)
+    if first_chapter_one_idx is None:
+        return None
+
+    start_page = toc[first_chapter_one_idx]["page_num"]
+    if not isinstance(start_page, int):
+        return None
+
+    last_chapter_idx = chapter_entries[-1][0]
+    end_page = total_pages
+    if last_chapter_idx + 1 < len(toc):
+        next_page = toc[last_chapter_idx + 1]["page_num"]
+        if isinstance(next_page, int):
+            end_page = next_page
+
+    end_page = max(start_page + 1, min(total_pages, end_page))
+    return start_page, end_page
+
+
+def _chapter_number(title: str) -> int | None:
+    match = re.search(r"\bchapter\s+([0-9]+)\b", title, re.IGNORECASE)
+    if match:
+        return int(match.group(1))
+
+    number_words = {
+        "one": 1,
+        "two": 2,
+        "three": 3,
+        "four": 4,
+        "five": 5,
+        "six": 6,
+        "seven": 7,
+        "eight": 8,
+        "nine": 9,
+        "ten": 10,
+    }
+
+    word_match = re.search(r"\bchapter\s+(one|two|three|four|five|six|seven|eight|nine|ten)\b", title, re.IGNORECASE)
+    if word_match:
+        return number_words[word_match.group(1).lower()]
+
+    leading_number = re.match(r"^\s*(\d{1,3})\b", title)
+    if leading_number:
+        return int(leading_number.group(1))
+
+    leading_word = re.match(r"^\s*(one|two|three|four|five|six|seven|eight|nine|ten)\b", title, re.IGNORECASE)
+    if leading_word:
+        return number_words[leading_word.group(1).lower()]
+
+    return None
+
+
+def _is_front_matter_title(title: str) -> bool:
+    normalized = re.sub(r"[^a-z0-9\s]", " ", title.lower())
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+
+    front_matter_terms = (
+        "copyright",
+        "title page",
+        "table of contents",
+        "contents",
+        "introduction",
+        "preface",
+        "acknowledgements",
+        "acknowledgments",
+        "foreword",
+        "epigraph",
+        "prologue",
+        "testimonials",
+        "praise",
+        "dedication",
+        "frontispiece",
+    )
+    return any(term in normalized for term in front_matter_terms)
+
+
+def _find_first_content_page(toc: list[Bookmark]) -> int | str:
+    for item in toc:
+        if _is_front_matter_title(item["title"]):
+            continue
+
+        if isinstance(item["page_num"], int):
+            return item["page_num"]
+
+    return toc[0]["page_num"]
+
+
+def _get_page_ref_id(page_ref: Any) -> int | None:
+    for attr in ("objid", "pageid"):
+        value = getattr(page_ref, attr, None)
+        if isinstance(value, int):
+            return value
+
+    return None
