@@ -155,17 +155,17 @@ def _find_chapter_page_bounds(
         page_num = item["page_num"]
         if not isinstance(page_num, int):
             continue
-
         if _is_front_matter_title(item["title"]):
             continue
-
         if _chapter_number(item["title"]) is not None:
             chapter_entries.append((idx, page_num))
 
     if not chapter_entries:
         return None
 
-    first_chapter_one_idx = next((idx for idx, _ in chapter_entries if _chapter_number(toc[idx]["title"]) == 1), None)
+    first_chapter_one_idx = next(
+        (idx for idx, _ in chapter_entries if _chapter_number(toc[idx]["title"]) == 1), None
+    )
     if first_chapter_one_idx is None:
         return None
 
@@ -173,12 +173,26 @@ def _find_chapter_page_bounds(
     if not isinstance(start_page, int):
         return None
 
-    last_chapter_idx = chapter_entries[-1][0]
+    # Determine the level of top-level chapters (e.g. level=1 for "Chapter 1")
+    chapter_level = min(toc[idx]["level"] for idx, _ in chapter_entries)
+
+    # Only consider top-level chapter entries — ignore sub-sections like "1.1 Intro"
+    top_level_chapters = [
+        (idx, pg) for idx, pg in chapter_entries
+        if toc[idx]["level"] == chapter_level
+    ]
+    last_top_chapter_idx = top_level_chapters[-1][0]
+
+    # Walk forward past any sub-entries of the last chapter;
+    # stop at the first same-or-higher-level entry (back matter, index, etc.)
     end_page = total_pages
-    if last_chapter_idx + 1 < len(toc):
-        next_page = toc[last_chapter_idx + 1]["page_num"]
-        if isinstance(next_page, int):
-            end_page = next_page
+    for i in range(last_top_chapter_idx + 1, len(toc)):
+        if toc[i]["level"] > chapter_level:
+            continue  # skip sub-sections of the last chapter
+        page_num = toc[i]["page_num"]
+        if isinstance(page_num, int):
+            end_page = page_num
+            break
 
     end_page = max(start_page + 1, min(total_pages, end_page))
     return start_page, end_page
@@ -200,9 +214,30 @@ def _chapter_number(title: str) -> int | None:
         "eight": 8,
         "nine": 9,
         "ten": 10,
+        "eleven": 11,
+        "twelve": 12,
+        "thirteen": 13,
+        "fourteen": 14,
+        "fifteen": 15,
+        "sixteen": 16,
+        "seventeen": 17,
+        "eighteen": 18,
+        "nineteen": 19,
+        "twenty": 20,
+        "twenty-one": 21,
+        "twenty-two": 22,
+        "twenty-three": 23,
+        "twenty-four": 24,
+        "twenty-five": 25,
+        "twenty-six": 26,
+        "twenty-seven": 27,
+        "twenty-eight": 28,
+        "twenty-nine": 29,
+        "thirty": 30,
     }
 
-    word_match = re.search(r"\bchapter\s+(one|two|three|four|five|six|seven|eight|nine|ten)\b", title, re.IGNORECASE)
+    _num_words_pattern = "|".join(number_words.keys())
+    word_match = re.search(r"\bchapter\s+({_num_words_pattern})\b", title, re.IGNORECASE)
     if word_match:
         return number_words[word_match.group(1).lower()]
 
