@@ -6,18 +6,12 @@ from typing import TypedDict, Any
 
 import pdfplumber
 from pdfplumber.utils import resolve
-from integrations.azure.blob_repository import download_blob_bytes
 
 class Bookmark(TypedDict):
     level: int
     title: str
     page_num: int | str
     y_coordinate: float | str
-
-
-def send_chunks(blob_name: str) -> dict[str, object]:
-    pdf_bytes = download_blob_bytes(blob_name)
-    return parse_and_clean(pdf_bytes)
 
 
 def parse_and_clean(pdf_bytes: bytes) -> dict[str, object]:
@@ -214,7 +208,7 @@ def _find_chapter_page_bounds(
     for i in range(last_top_chapter_idx + 1, len(toc)):
         if toc[i]["level"] > chapter_level:
             continue  # skip sub-sections of the last chapter
-        
+
         page_num = toc[i]["page_num"]
         if isinstance(page_num, int):
             end_page = page_num
