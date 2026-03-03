@@ -77,7 +77,20 @@ def update_job_status(
     completed_agents: list[str] | None = None,
     error: str | None = None,
 ) -> None:
+    container = _get_container()
+    patch_ops = [
+        {"op": "replace", "path": "/status", "value": status},
+        {"op": "replace", "path": "/updated_at", "value": _now()},
+    ]
+    if current_agent is not None:
+        patch_ops.append({"op": "replace", "path": "/current_agent", "value": current_agent})
+    if completed_agents is not None:
+        patch_ops.append({"op": "replace", "path": "/completed_agents", "value": completed_agents})
+    if error is not None:
+        patch_ops.append({"op": "replace", "path": "/error", "value": error})
 
+    container.patch_item(item=job_id, partition_key=job_id, patch_operations=patch_ops)
+    
 def get_job(job_id: str) -> JobDocument:
     container = _get_container()
     return container.read_item(item=job_id, partition_key=job_id)
