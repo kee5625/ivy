@@ -49,7 +49,10 @@ class IngestionAgent:
         Download raw PDF bytes from Azure Blob Storage.
         Raises RuntimeError if the blob cannot be fetched.
         """
-        ...
+        pdf_bytes = download_blob_bytes(blob_name)
+        if not pdf_bytes:
+            raise RuntimeError(f"Blob'{blob_name}' was found but is empty")    
+        return pdf_bytes
 
     # ── Step 2 ────────────────────────────────────────────────────────────────
 
@@ -59,7 +62,12 @@ class IngestionAgent:
         Returns (raw_text, toc).
         Raises RuntimeError if parse_service returns an error (e.g. no TOC found).
         """
-        ...
+        result = parse_and_clean(pdf_bytes)
+        
+        if "error" in result:
+            raise RuntimeError(f"parse_service failed: {result['error']}")
+            
+        return result["text"], result["full_toc"]
 
     # ── Step 3 ────────────────────────────────────────────────────────────────
 
