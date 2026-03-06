@@ -5,12 +5,13 @@
 ## Week 1: Database Decision + Azure Foundation
 
 ### Tasks
-- [X] Create Azure resource group
-- [X] Deploy Azure Cosmos DB (Gremlin API)
-- [X] Create Azure Blob Storage container (for PDFs)
-- [X] Deploy Azure OpenAI Service
-- [X] Connect FastAPI to Cosmos DB
-- [X] Deploy frontend and backend to Azure
+
+- [x] Create Azure resource group
+- [x] Deploy Azure Cosmos DB (Gremlin API)
+- [x] Create Azure Blob Storage container (for PDFs)
+- [x] Deploy Azure OpenAI Service
+- [x] Connect FastAPI to Cosmos DB
+- [x] Deploy frontend and backend to Azure
 
 ---
 
@@ -28,11 +29,12 @@
 ## Week 2: Single-Agent Extraction Pipeline
 
 ### Tasks
-- [X] Upload PDF endpoint → Blob Storage
+
+- [x] Upload PDF endpoint → Blob Storage
 - [ ] Pull PDF bytes from Blob Storage in backend worker/service
 - [ ] Parse PDF text (pdfplumber primary, PyPDF2 fallback)
 - [ ] Detect chapters and create chunking strategy
-- [X] Set up Microsoft Foundry project
+- [x] Set up Microsoft Foundry project
 - [ ] Create timeline extraction prompt templates in Foundry
 - [ ] Extract timeline outputs:
   - Chapter summary (3-5 bullets)
@@ -46,6 +48,7 @@
 ## Week 3: Multi-Agent System (5 Agents)
 
 ### Agent Architecture
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    User Uploads PDF                          │
@@ -118,6 +121,7 @@ All agents read/write to shared state in Cosmos DB:
 ```
 
 ### Tasks
+
 - [ ] Extract characters from timeline-aware chunks with confidence scores
 - [ ] Resolve aliases (same character with different names)
 - [ ] Build character linkage model:
@@ -133,6 +137,7 @@ All agents read/write to shared state in Cosmos DB:
 ## Week 4: Intelligence Layer + Azure AI Search
 
 ### Tasks
+
 - [ ] Implement "Narrative Consistency Score" (0-100)
   - Timeline coherence (30%)
   - Character consistency (30%)
@@ -164,6 +169,7 @@ All agents read/write to shared state in Cosmos DB:
 ## Week 5: Polish + Demo Preparation
 
 ### Tasks
+
 - [ ] Interactive graph visualization
   - Library: Cytoscape.js or React Flow
   - Features: Zoom, pan, node selection
@@ -197,13 +203,14 @@ All agents read/write to shared state in Cosmos DB:
 
 ---
 
-
 ### System
+
 - Agent retry logic and error handling
 - Parallel agent execution where possible
 - Agent confidence scoring
 
 ### Microsoft Foundry
+
 - A/B testing different prompts
 - Custom evaluation metrics
 - Foundry deployment as managed endpoint
@@ -213,6 +220,7 @@ All agents read/write to shared state in Cosmos DB:
 ## 💡 Success Metrics
 
 By end of hackathon:
+
 - [ ] Can upload 100-page PDF and see timeline + chapter summaries in < 2 minutes
 - [ ] Character linkage view is accurate enough for demo (major characters + interactions)
 - [ ] Plot hole detection finds ≥ 3 real issues in test novels
@@ -224,132 +232,98 @@ By end of hackathon:
 
 ## Tech Stack Summary
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | Next.js 16 + React 19 + Tailwind CSS |
-| Backend | FastAPI (Python) |
-| Graph DB | Azure Cosmos DB (Gremlin API) |
-| File Storage | Azure Blob Storage |
-| AI Models | Azure OpenAI (GPT-4o, GPT-4o-mini, text-embedding-3-small) |
-| Search | Azure AI Search |
-| Agent Framework | Microsoft Agent Framework |
-| AI Orchestration | Microsoft Foundry |
-| Deployment | Azure Container Apps OR Static Web Apps + Functions |
-| Graph Viz | Cytoscape.js or React Flow |
+| Layer            | Technology                                                 |
+| ---------------- | ---------------------------------------------------------- |
+| Frontend         | Next.js 16 + React 19 + Tailwind CSS                       |
+| Backend          | FastAPI (Python)                                           |
+| Graph DB         | Azure Cosmos DB (Gremlin API)                              |
+| File Storage     | Azure Blob Storage                                         |
+| AI Models        | Azure OpenAI (GPT-4o, GPT-4o-mini, text-embedding-3-small) |
+| Search           | Azure AI Search                                            |
+| Agent Framework  | Microsoft Agent Framework                                  |
+| AI Orchestration | Microsoft Foundry                                          |
+| Deployment       | Azure Container Apps OR Static Web Apps + Functions        |
+| Graph Viz        | Cytoscape.js or React Flow                                 |
 
 ---
 
-## Suggested Project Structure
+## Actual Project Structure
 
     ivy/
       ROADMAP.md
-      docker-compose.yml
-      .github/workflows/
+      README.md
+      .gitignore
 
       backend/
-        app/
+        app.py                        # FastAPI app entry point + app.state startup
+        main.py                       # uvicorn entrypoint
+        config.py                     # Environment config + Gremlin client builder
+
+        api/
+          __init__.py                 # Registers all routers
+          routes/
+            __init__.py
+            document.py               # POST /pdf/upload, GET /jobs/{id}, GET /jobs/{id}/chapters
+            system.py                 # Health check
+
+        agents/
+          __init__.py                 # Exports all agents
+          ingestion_agent.py          # ✅ Step 1: download → parse → chunk → LLM → Cosmos
+          entity_agent.py             # TODO: Step 2: extract characters/locations/objects
+          timeline_agent.py           # TODO: Step 3: order events + causal chains
+          relationship_agent.py       # TODO: Step 4: build edges between entities
+          plot_hole_agent.py          # TODO: Step 5: consistency checks
+
+        services/
           __init__.py
-          main.py                     # FastAPI app entry point
-          config.py                   # Environment config (pydantic-settings)
-          dependencies.py             # Shared DI (clients from app.state)
+          parse_service.py            # ✅ PDF byte extraction via pdfplumber (no LLM)
+          ingestion_service.py        # Thin glue: boots IngestionAgent, returns job_id
 
-          api/
-            __init__.py
-            routes/
-              __init__.py
-              health.py
-              documents.py            # Upload + job creation
-              jobs.py                 # Job status/progress/results
-              graph.py                # Graph query endpoints
-              search.py               # AI Search query endpoints
-            schemas/
-              __init__.py
-              documents.py
-              jobs.py
-              graph.py
-              search.py
+        integrations/
+          azure/
+            blob_client.py            # ✅ BlobServiceClient lifecycle
+            blob_repository.py        # ✅ upload / download / delete blob helpers
+            openai_client.py          # TODO: AsyncAzureOpenAI client (Foundry endpoint)
+          cosmos/
+            cosmos_client.py          # ✅ CosmosClient + container helpers
+            cosmos_repository.py      # ✅ CRUD for job/chapter/entity/timeline/plot_hole docs
 
-          services/
-            __init__.py
-            ingestion_service.py      # Upload -> Blob -> parse trigger
-            parse_service.py          # PDF extraction/chunking
-            extraction_service.py     # Foundry/OpenAI extraction
-            graph_service.py          # Cosmos graph writes/reads
-            scoring_service.py        # Consistency score, plot holes
-            whatif_service.py         # What-if propagation logic
-
-          agents/
-            __init__.py
-            orchestrator.py
-            base_agent.py
-            ingestion_agent.py
-            entity_agent.py
-            timeline_agent.py
-            relationship_agent.py
-            plot_hole_agent.py
-
-          integrations/
-            __init__.py
-            azure/
-              __init__.py
-              blob_client.py          # BlobServiceClient lifecycle
-              blob_repository.py      # Upload/download helpers
-              openai_client.py
-              ai_search_client.py
-            cosmos/
-              __init__.py
-              gremlin_client.py
-              graph_repository.py
-
-          domain/
-            __init__.py
-            models/
-              __init__.py
-              document.py
-              entity.py
-              event.py
-              relationship.py
-              job.py
-
-          utils/
-            __init__.py
-            logging.py
-
-          tests/
-            __init__.py
-            unit/
-            integration/
+        utils/
+          clients.py                  # Pydantic models (ToDoItem — to be replaced)
 
         pyproject.toml
-        .env.example
+        uv.lock
 
       ivy-client/
         src/
-          app/
-            pages/
-              UploadPage.tsx
-              JobStatusPage.tsx
-              GraphPage.tsx
-            components/
-              upload/
-              graph/
-              jobs/
-            api/
-              documents.ts
-              jobs.ts
-              graph.ts
-              search.ts
-            hooks/
-              useUpload.ts
-              useJobPolling.ts
-            types/
-              api.ts
-              graph.ts
+          App.tsx                     # Root component (bare scaffold)
           main.tsx
           style.css
 
+        index.html
         package.json
         vite.config.ts
+        tsconfig.json
+
+      tests/
+        harry-potter-and-the-philosophers-stone-by-jk-rowling.pdf   # local test PDF
+
+### What's built vs TODO
+
+| File                    | Status  | Notes                                        |
+| ----------------------- | ------- | -------------------------------------------- |
+| `parse_service.py`      | ✅ Done | pdfplumber TOC extraction + chapter bounds   |
+| `blob_repository.py`    | ✅ Done | upload / download / delete                   |
+| `cosmos_repository.py`  | ✅ Done | all document types + queries                 |
+| `ingestion_agent.py`    | ✅ Done | full async pipeline, parallel LLM calls      |
+| `document.py` route     | ✅ Done | upload → job → background agent → poll       |
+| `openai_client.py`      | 🔲 TODO | AsyncAzureOpenAI pointed at Foundry endpoint |
+| `app.py` startup        | 🔲 TODO | register openai_client on app.state          |
+| `entity_agent.py`       | 🔲 TODO |                                              |
+| `timeline_agent.py`     | 🔲 TODO |                                              |
+| `relationship_agent.py` | 🔲 TODO | writes edges to Gremlin                      |
+| `plot_hole_agent.py`    | 🔲 TODO |                                              |
+| frontend pages          | 🔲 TODO | upload, job status, graph viz                |
 
 ---
 
