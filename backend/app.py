@@ -3,6 +3,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from gremlin_python.driver.client import Client
+from integrations.azure.openai_client import create_project_client, get_inference_client
 
 from api import router as api_router
 from config import (
@@ -33,6 +34,12 @@ def create_app() -> FastAPI:
 
     @app.on_event("startup")
     async def startup_gremlin_client() -> None:
+        project_client = create_project_client()
+        if project_client is None:
+            logger.warning("Foundry not configured. Set PROJECT_ENDPOINT.")
+            app.state.openai_client = None
+        else:
+            app.state.openai_client = get_inference_client(project_client)
         if not is_gremlin_configured():
             logger.warning(
                 "Gremlin not configured. Set GREMLIN_ENDPOINT and GREMLIN_KEY."
