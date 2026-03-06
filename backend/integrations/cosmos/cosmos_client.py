@@ -33,14 +33,23 @@ def get_container_client(
     container_name: str | None = None,
 ) -> ContainerProxy:
     database_name = os.getenv("COSMOS_DATABASE", "ivy")
+    container_name = container_name or get_cosmos_container_name()
+
     database = cosmos_client.get_database_client(database_name)
-    return database.get_container_client(container_name or get_cosmos_container_name())
 
-
-def ensure_container_exists(container_client: ContainerProxy) -> None:
+    # create_container_if_not_exists belongs to DatabaseProxy, not ContainerProxy
     try:
-        container_client.create_container_if_not_exists(
+        database.create_container_if_not_exists(
+            id=container_name,
             partition_key=PartitionKey(path="/job_id"),
         )
     except ResourceExistsError:
-        return
+        pass
+
+    return database.get_container_client(container_name)
+
+
+def ensure_container_exists(container_client: ContainerProxy) -> None:
+    # No-op: container creation now happens inside get_container_client so
+    # callers that pass a ContainerProxy here don't need to do anything extra.
+    pass

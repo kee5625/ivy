@@ -22,6 +22,11 @@ class IngestionAgent:
         self.job_id = job_id
 
     async def run(self, blob_name: str) -> str:
+        if self.openai is None:
+            raise RuntimeError(
+                "OpenAI client is not configured. "
+                "Set OPENAI_ENDPOINT + PROJECT_KEY in your .env file."
+            )
         update_job_status(self.job_id, status="in_progress", current_agent="ingestion_agent")
 
         try:
