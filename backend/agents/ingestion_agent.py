@@ -14,6 +14,7 @@ from services.parse_service import Bookmark, parse_and_clean
 logger = logging.getLogger(__name__)
 
 
+
 class IngestionAgent:
 
     def __init__(self, openai_client, job_id: str):
@@ -108,21 +109,21 @@ class IngestionAgent:
         1. A 3-5 bullet summary of the chapter
         2. A list of key events (each as a short sentence)
         3. Every character mentioned (names only)
-        
+
         Respond in JSON with exactly this shape:
         {{
         "summary": ["bullet 1", "bullet 2"],
         "key_events": ["event 1", "event 2"],
         "characters": ["Name1", "Name2"]
         }}
-        
+
         Chapter: {chunk['chapter_title']}
-        
+
         Text:
         {chunk['text'][:8000]}"""
 
         response = await self.openai.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-4.1-mini",
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
         )
