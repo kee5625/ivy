@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from uuid import uuid4
 
 from integrations.azure.blob_repository import download_blob_bytes
 from integrations.cosmos.cosmos_repository import (
@@ -16,126 +15,125 @@ logger = logging.getLogger(__name__)
 
 
 class IngestionAgent:
-    """
-    Ingestion Agent — Step 1 of the multi-agent pipeline.
-
-    Responsibilities:
-      1. Download PDF bytes from Blob Storage
-      2. Extract raw text + TOC via parse_service (no LLM, pure pdfplumber)
-      3. Split raw text into per-chapter chunks using the TOC
-      4. Send all chunks to the LLM in parallel for structured extraction
-      5. Write each chapter result to Cosmos as it finishes (so frontend updates live)
-      6. Update job status to signal the next agent (entity_agent) to start
-
-    Input:  blob_name (str)  — the PDF's location in Blob Storage
-    Output: job_id   (str)  — written to Cosmos, returned for polling
-    """
 
     def __init__(self, openai_client, job_id: str):
         self.openai = openai_client
         self.job_id = job_id
 
     async def run(self, blob_name: str) -> str:
-        """
-        Main entry point. Orchestrates all steps and returns the job_id.
-        Updates job status in Cosmos at each stage so the frontend can poll progress.
-        """
-        ...
+        update_job_status(self.job_id, status="in_progress", current_agent="ingestion_agent")
 
-    # ── Step 1 ────────────────────────────────────────────────────────────────
+        try:
+            pdf_bytes = self._download_pdf(blob_name)
+            raw_text, toc = self._parse_pdf(pdf_bytes)
+            chunks = self._chunk_by_chapter(raw_text, toc)
+            await self._extract_all_chapters(chunks)
+            update_job_status(
+                self.job_id,
+                status="ingestion_complete",
+                current_agent="entity_agent",
+                completed_agents=["ingestion_agent"],
+            )
+        except Exception as e:
+            update_job_status(self.job_id, status="failed", error=str(e))
+            raise
+
+        return self.job_id
 
     def _download_pdf(self, blob_name: str) -> bytes:
-        """
-        Download raw PDF bytes from Azure Blob Storage.
-        Raises RuntimeError if the blob cannot be fetched.
-        """
         pdf_bytes = download_blob_bytes(blob_name)
         if not pdf_bytes:
-            raise RuntimeError(f"Blob'{blob_name}' was found but is empty")    
+            raise RuntimeError(f"Blob '{blob_name}' was found but is empty")
         return pdf_bytes
 
-    # ── Step 2 ────────────────────────────────────────────────────────────────
-
     def _parse_pdf(self, pdf_bytes: bytes) -> tuple[str, list[Bookmark]]:
-        """
-        Pass PDF bytes to parse_service.parse_and_clean().
-        Returns (raw_text, toc).
-        Raises RuntimeError if parse_service returns an error (e.g. no TOC found).
-        """
         result = parse_and_clean(pdf_bytes)
-        
         if "error" in result:
             raise RuntimeError(f"parse_service failed: {result['error']}")
-            
         return result["text"], result["full_toc"]
 
-    # ── Step 3 ────────────────────────────────────────────────────────────────
+    def _chunk_by_chapter(self, raw_text: str, toc: list[Bookmark]) -> list[dict]:
+        chunks = []
 
-    def _chunk_by_chapter(
-        self,
-        raw_text: str,
-        toc: list[Bookmark],
-    ) -> list[dict]:
-        """
-        Split raw_text into per-chapter chunks using TOC titles as boundaries.
+        chapter_toc = [t for t in toc if isinstance(t["page_num"], int)]
 
-        Each chunk is a dict:
-          {
-            "chapter_num":   int,
-            "chapter_title": str,
-            "text":          str,   # raw text from this chapter only
-          }
+        for i, entry in enumerate(chapter_toc):
+            title = entry["title"]
+            start_idx = raw_text.find(title)
+            if start_idx == -1:
+                continue
 
-        Strategy:
-          - Find each TOC title's position in raw_text as a start boundary
-          - The next TOC title's position is the end boundary
-          - If a title can't be found in the text, skip that entry
+            end_idx = len(raw_text)
+            if i + 1 < len(chapter_toc):
+                next_title = chapter_toc[i + 1]["title"]
+                next_idx = raw_text.find(next_title, start_idx + len(title))
+                if next_idx != -1:
+                    end_idx = next_idx
 
-        Fallback:
-          - If no chunks are found (titles didn't match), return the whole
-            text as a single chunk titled "Full Text"
-        """
-        ...
+            chunks.append({
+                "chapter_num": i + 1,
+                "chapter_title": title,
+                "text": raw_text[start_idx:end_idx].strip(),
+            })
 
-    # ── Step 4 + 5 ────────────────────────────────────────────────────────────
+        if not chunks:
+            chunks = [{"chapter_num": 1, "chapter_title": "Full Text", "text": raw_text}]
+
+        return chunks
 
     async def _extract_all_chapters(self, chunks: list[dict]) -> list[dict]:
-        """
-        Fire LLM extraction for all chunks simultaneously using asyncio.gather.
-        Each completed chapter is written to Cosmos immediately (don't wait for all).
-        Returns the full list of extracted chapter dicts.
-        """
-        ...
+        tasks = [self._extract_and_save(chunk) for chunk in chunks]
+        return await asyncio.gather(*tasks)
 
     async def _extract_and_save(self, chunk: dict) -> dict:
-        """
-        Extract structured data from a single chapter chunk, then immediately
-        upsert it to Cosmos so the frontend can render it without waiting for
-        the full pipeline to finish.
-
-        Calls _extract_chapter_data() then upsert_chapter().
-        Returns the extracted chapter dict.
-        """
-        ...
+        result = await self._extract_chapter_data(chunk)
+        upsert_chapter(
+            job_id=self.job_id,
+            chapter_num=result["chapter_num"],
+            chapter_title=result["chapter_title"],
+            summary=result["summary"],
+            key_events=result["key_events"],
+            characters=result["characters"],
+            raw_text=result["raw_text"],
+        )
+        logger.info(
+            "[IngestionAgent] job=%s chapter=%d saved",
+            self.job_id,
+            result["chapter_num"],
+        )
+        return result
 
     async def _extract_chapter_data(self, chunk: dict) -> dict:
-        """
-        Send a single chapter chunk to the LLM (gpt-4o-mini) and ask for:
-          - summary:    list[str]  — 3-5 bullet points describing the chapter
-          - key_events: list[str]  — short sentences, one per significant event
-          - characters: list[str]  — names of every character who appears
+        prompt = f"""You are a literary analyst. Given the following chapter text, extract:
+        1. A 3-5 bullet summary of the chapter
+        2. A list of key events (each as a short sentence)
+        3. Every character mentioned (names only)
+        
+        Respond in JSON with exactly this shape:
+        {{
+        "summary": ["bullet 1", "bullet 2"],
+        "key_events": ["event 1", "event 2"],
+        "characters": ["Name1", "Name2"]
+        }}
+        
+        Chapter: {chunk['chapter_title']}
+        
+        Text:
+        {chunk['text'][:8000]}"""
 
-        Use response_format={"type": "json_object"} so the response is
-        always valid JSON. Cap the text at 8000 chars to stay within token limits.
+        response = await self.openai.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"},
+        )
 
-        Returns a dict:
-          {
-            "chapter_num":   int,
-            "chapter_title": str,
-            "summary":       list[str],
-            "key_events":    list[str],
-            "characters":    list[str],
-            "raw_text":      str,
-          }
-        """
-        ...
+        extracted = json.loads(response.choices[0].message.content)
+
+        return {
+            "chapter_num": chunk["chapter_num"],
+            "chapter_title": chunk["chapter_title"],
+            "summary": extracted.get("summary", []),
+            "key_events": extracted.get("key_events", []),
+            "characters": extracted.get("characters", []),
+            "raw_text": chunk["text"],
+        }
