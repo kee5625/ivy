@@ -1,11 +1,12 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from 'axios'
+import axios from "axios";
 
 export default function Home() {
   const navigate = useNavigate();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const inflightRef = useRef(false);
 
   const fileSize = useMemo(() => {
     if (!selectedFile) {
@@ -15,25 +16,38 @@ export default function Home() {
     const mb = selectedFile.size / (1024 * 1024);
     return `${mb.toFixed(2)} MB`;
   }, [selectedFile]);
-  
+
   const handleFileSubmit = async () => {
     if (!selectedFile) {
       alert("Please upload a PDF before submitting");
       return;
     }
 
+    // Hard guard: if a request is already in flight (e.g. double-click or
+    // label/input double-fire), bail out immediately without sending a second
+    // HTTP request — which would cause an ECONNRESET on the backend.
+    if (inflightRef.current) return;
+    inflightRef.current = true;
+
     const formData = new FormData();
     formData.append("file", selectedFile);
-    
+
     try {
       setIsUploading(true);
-      const response = await axios.post("/api/pdf/parse", formData);
+      const response = await axios.post("/api/pdf/upload", formData, {
+        // Tell the server we won't reuse this connection, preventing uvicorn
+        // from receiving a pipelined second request and resetting mid-read.
+        headers: { Connection: "close" },
+      });
       const jobId = response.data?.job_id ?? selectedFile.name;
 
       // Navigate to the graph page with the job ID
       navigate(`/graph/${jobId}`);
     } catch (e) {
       alert("Failed to upload file.");
+      // Only release the guard on failure so the user can retry.
+      // On success we navigate away, so the component unmounts anyway.
+      inflightRef.current = false;
     } finally {
       setIsUploading(false);
     }
