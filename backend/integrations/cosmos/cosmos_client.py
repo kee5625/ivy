@@ -1,12 +1,12 @@
 from __future__ import annotations
-from azure.cosmos import CosmosClient, ContainerProxy, PartitionKey
 
 import os
 
 from azure.core.exceptions import ResourceExistsError
-from azure.identity import DefaultAzureCredential
+from azure.cosmos import ContainerProxy, CosmosClient, PartitionKey
 
 DEFAULT_COSMOS_CONTAINER = "ivy-container"
+
 
 def get_cosmos_container_name() -> str:
     return os.getenv("COSMOS_CONTAINER", DEFAULT_COSMOS_CONTAINER)
@@ -16,8 +16,16 @@ def create_cosmos_client() -> CosmosClient | None:
     account_url = os.getenv("COSMOS_ACCOUNT_URL")
     if not account_url:
         return None
-    credential = DefaultAzureCredential()
-    return CosmosClient(account_url=account_url, credential=credential)
+
+    key = os.getenv("COSMOS_KEY")
+    if key:
+        # Simplest auth: account key — works locally without any Azure CLI
+        # login or managed identity configured.
+        return CosmosClient(url=account_url, credential=key)
+
+    # Fallback for deployed environments: managed identity / Azure CLI / etc.
+    from azure.identity import DefaultAzureCredential  # lazy import
+    return CosmosClient(url=account_url, credential=DefaultAzureCredential())
 
 
 def get_container_client(
