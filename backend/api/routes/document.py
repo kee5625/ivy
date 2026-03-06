@@ -13,8 +13,13 @@ router = APIRouter(tags=["documents"])
 
 
 async def _run_ingestion(openai_client, job_id: str, blob_name: str) -> None:
-    agent = IngestionAgent(openai_client=openai_client, job_id=job_id)
-    await agent.run(blob_name)
+    try:
+        agent = IngestionAgent(openai_client=openai_client, job_id=job_id)
+        await agent.run(blob_name)
+    except Exception:
+        import traceback, sys
+        traceback.print_exc(file=sys.stderr)
+        logger.exception("[_run_ingestion] background task failed for job=%s", job_id)
 
 
 @router.post("/pdf/upload")
@@ -40,7 +45,7 @@ async def upload_pdf(
         logger.exception("Blob upload failed")
         raise HTTPException(status_code=500, detail="Failed to upload PDF") from exc
 
-    # 2. Create job in Cosmos — returns job_id immediately
+    # 2. Create job in Cosmos -- returns job_id immediately
     try:
         job_id = create_job(blob_name=uploaded["blob_name"])
         logger.info("Created job: %s", job_id)
@@ -48,7 +53,7 @@ async def upload_pdf(
         logger.exception("Job creation failed")
         raise HTTPException(status_code=500, detail="Failed to create job") from exc
 
-    # 3. Fire ingestion agent in the background — route returns immediately
+    # 3. Fire ingestion agent in the background -- route returns immediately
     openai_client = request.app.state.openai_client
     background_tasks.add_task(_run_ingestion, openai_client, job_id, uploaded["blob_name"])
     logger.info("Ingestion agent queued for job: %s", job_id)

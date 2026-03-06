@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 
 from integrations.azure.blob_repository import download_blob_bytes
 from integrations.cosmos.cosmos_repository import (
@@ -128,7 +129,7 @@ class IngestionAgent:
         {chunk['text'][:8000]}"""
 
         response = await self.openai.chat.completions.create(
-            model="gpt-4.1-mini",
+            model=os.getenv("OPENAI_DEPLOYMENT", "gpt-4o-mini"),
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
         )
