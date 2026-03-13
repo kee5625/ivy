@@ -14,13 +14,14 @@ from services.parse_service import parse_and_clean
 
 logger = logging.getLogger(__name__)
 
-# Max concurrent OpenAI calls to avoid rate-limit errors
-_MAX_CONCURRENT_LLM_CALLS = 1
+# Max concurrent OpenAI calls to avoid rate-limit/connection pool errors
+# Increased to 5 now that CosmosDB connection leaks are fixed.
+_MAX_CONCURRENT_LLM_CALLS = 10
 
 # Max characters of chapter text to send to the LLM per call.
-# gpt-4o-mini supports 128K context; ~40K chars ≈ ~10K tokens leaves plenty
-# of room for the prompt template and the JSON response.
-_MAX_CHAPTER_CHARS = 40_000
+# Reduced to 15,000 to drastically speed up processing and stay well within
+# fast latency boundaries while getting the gist of the chapter.
+_MAX_CHAPTER_CHARS = 15_000
 
 # Retry configuration
 _MAX_RETRIES = 3
@@ -110,7 +111,7 @@ class IngestionAgent:
             if isinstance(res, Exception):
                 failures += 1
                 logger.error(
-                    "[IngestionAgent] job=%s  chapter %d failed: %s",
+                    "[IngestionAgent] job=%s  chapter %d failed: %r",
                     self.job_id,
                     i + 1,
                     res,
@@ -163,7 +164,7 @@ class IngestionAgent:
                     delay = _RETRY_BASE_DELAY * (2 ** (attempt - 1))
                     logger.warning(
                         "[IngestionAgent] job=%s  chapter=%d  attempt %d/%d "
-                        "failed (%s), retrying in %.1fs",
+                        "failed (%r), retrying in %.1fs",
                         self.job_id,
                         chunk["chapter_num"],
                         attempt,
@@ -175,7 +176,7 @@ class IngestionAgent:
 
         raise RuntimeError(
             f"Chapter {chunk['chapter_num']} failed after {_MAX_RETRIES} "
-            f"attempts: {last_exc}"
+            f"attempts: {repr(last_exc)}"
         ) from last_exc
 
     async def _extract_chapter_data(self, chunk: dict) -> dict:
@@ -183,9 +184,9 @@ class IngestionAgent:
 
         prompt = (
             "You are a literary analyst. Given the following chapter text, extract:\n"
-            "1. A 3-5 bullet summary of the chapter\n"
-            "2. A list of key events (each as a short sentence)\n"
-            "3. Every character mentioned (names only)\n\n"
+            "1. A strict maximum of 3 short bullets for the summary.\n"
+            "2. A strict maximum of 5 key events (each as a short sentence).\n"
+            "3. Only the top 10 most important characters mentioned (names only).\n\n"
             "Respond in JSON with exactly this shape:\n"
             "{\n"
             '  "summary": ["bullet 1", "bullet 2"],\n'
