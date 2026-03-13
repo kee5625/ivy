@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-import io
 import re
-from typing import TypedDict, Any
+import logging
+from typing import TypedDict
 
-import pdfplumber
-from pdfplumber.utils import resolve
+import fitz  # PyMuPDF
+
+logger = logging.getLogger(__name__)
+
 
 class Bookmark(TypedDict):
     level: int
@@ -14,296 +16,406 @@ class Bookmark(TypedDict):
     y_coordinate: float | str
 
 
+class ChapterChunk(TypedDict):
+    chapter_num: int
+    chapter_title: str
+    text: str
+    start_page: int
+    end_page: int
+
+
 def parse_and_clean(pdf_bytes: bytes) -> dict[str, object]:
-    with pdfplumber.open(io.BytesIO(pdf_bytes)) as pdf:
-        toc = extract_toc(pdf)
+    """
+    Parse a PDF entirely with PyMuPDF (no pdfplumber/pdfminer).
 
-        if not toc:
-            return {"error": "No table of contents found in the PDF."}
+    Returns
+    -------
+    {
+        "chapters": [ChapterChunk, ...],   # pre-split chapter text
+        "full_toc": [Bookmark, ...],       # raw TOC for reference
+    }
+    or {"error": "..."} on failure.
+    """
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    total_pages = len(doc)
 
-        chapter_bounds = _find_chapter_page_bounds(toc, len(pdf.pages))
-        if chapter_bounds:
-            start_page, end_page = chapter_bounds
-        else:
-            start_page = _find_first_content_page(toc)
-            end_page = len(pdf.pages)
+    if total_pages == 0:
+        doc.close()
+        return {"error": "PDF has no pages."}
 
-        if isinstance(start_page, int):
-            text_chunks = []
-            for i in range(start_page, end_page):
-                page_text = pdf.pages[i].extract_text()
-                if page_text:
-                    text_chunks.append(page_text)
+    # ── 1. Extract TOC via PyMuPDF (instant — no pdfminer) ────────────────
+    raw_toc = doc.get_toc(simple=True)  # [[level, title, page], ...]
+    toc = _raw_toc_to_bookmarks(raw_toc)
 
-            full_text = "\n".join(text_chunks)
-        else:
-            full_text = ""
-
+    if not toc:
+        # No TOC at all → return entire book as a single chapter
+        logger.warning("No TOC found in PDF — returning full text as one chapter")
+        full_text = _extract_page_range(doc, 0, total_pages)
+        doc.close()
         return {
-            "title": "Full Book (Starting at Chapter 1)",
-            "text": _normalize_text(full_text),
-            "full_toc": toc
+            "chapters": [
+                {
+                    "chapter_num": 1,
+                    "chapter_title": "Full Text",
+                    "text": _normalize_text(full_text),
+                    "start_page": 0,
+                    "end_page": total_pages,
+                }
+            ],
+            "full_toc": [],
         }
 
+    # ── 2. Identify chapter page ranges ───────────────────────────────────
+    chapters = _build_chapter_chunks(doc, toc, total_pages)
 
-def extract_section_text(pdf: pdfplumber.pdf.PDF, toc: list[Bookmark], index: int) -> str:
-    """Helper to extract text from a specific TOC section until the next section begins."""
-    start_page = toc[index]["page_num"]
+    doc.close()
 
-    if not isinstance(start_page, int):
-        return ""
+    if not chapters:
+        # Fallback: couldn't identify chapters, treat as one
+        logger.warning("Could not identify chapter boundaries — returning full text")
+        doc2 = fitz.open(stream=pdf_bytes, filetype="pdf")
+        full_text = _extract_page_range(doc2, 0, total_pages)
+        doc2.close()
+        return {
+            "chapters": [
+                {
+                    "chapter_num": 1,
+                    "chapter_title": "Full Text",
+                    "text": _normalize_text(full_text),
+                    "start_page": 0,
+                    "end_page": total_pages,
+                }
+            ],
+            "full_toc": toc,
+        }
 
-    end_page = len(pdf.pages)
-
-    if index + 1 < len(toc):
-        next_page = toc[index + 1]["page_num"]
-        if isinstance(next_page, int):
-            end_page = next_page
-
-    text_chunks = []
-    for i in range(start_page, max(start_page + 1, end_page)):
-        if i < len(pdf.pages):
-            page_text = pdf.pages[i].extract_text()
-            if page_text:
-                text_chunks.append(page_text)
-
-    return "\n".join(text_chunks)
+    return {
+        "chapters": chapters,
+        "full_toc": toc,
+    }
 
 
-def extract_toc(pdf: pdfplumber.pdf.PDF) -> list[Bookmark]:
-    page_id_to_num = {}
-    for i, page in enumerate(pdf.pages):
-        page_id = _get_page_ref_id(page.page_obj)
-        if page_id is not None:
-            page_id_to_num[page_id] = i
+# ── TOC helpers ───────────────────────────────────────────────────────────────
 
-    try:
-        outlines = pdf.doc.get_outlines()
-    except Exception:
-        print("No outlines/bookmarks found in this PDF.")
-        return []
 
+def _raw_toc_to_bookmarks(raw_toc: list[list]) -> list[Bookmark]:
+    """Convert PyMuPDF's get_toc() output to our Bookmark format.
+
+    PyMuPDF returns [[level, title, page_number], ...] where page_number is
+    1-based.  We convert to 0-based page_num for internal consistency.
+    """
     bookmarks: list[Bookmark] = []
-
-    # Fixed loop variable name
-    for outline in outlines:
-        level, title, dest, action, se = outline
-
-        page_num = "Unknown"
-        y_coordinate = "Unknown"
-
-        if dest:
-            resolved_dest = resolve(dest)
-
-            if isinstance(resolved_dest, list) and len(resolved_dest) > 0:
-                page_ref = resolved_dest[0]
-
-                page_ref_id = _get_page_ref_id(page_ref)
-                if page_ref_id is not None:
-                    page_num = page_id_to_num.get(page_ref_id, "Unknown")
-
-                if len(resolved_dest) >= 4 and resolved_dest[1].name == 'XYZ':
-                    y_coordinate = resolved_dest[3]
-        elif action:
-            resolved_action = resolve(action)
-            if isinstance(resolved_action, dict):
-                destination = resolved_action.get(b"D", resolved_action.get("D"))
-                if destination is None:
-                    destination = resolved_action.get(b"Dest", resolved_action.get("Dest"))
-
-                if destination is not None:
-                    action_dest = resolve(destination)
-                else:
-                    action_dest = None
-
-                if isinstance(action_dest, list) and len(action_dest) > 0:
-                    page_ref = action_dest[0]
-                    page_ref_id = _get_page_ref_id(page_ref)
-                    if page_ref_id is not None:
-                        page_num = page_id_to_num.get(page_ref_id, "Unknown")
-
+    for entry in raw_toc:
+        if len(entry) < 3:
+            continue
+        level, title, page = entry[0], entry[1], entry[2]
+        # page is 1-based in PyMuPDF; -1 means unresolved
+        page_num: int | str = (page - 1) if isinstance(page, int) and page >= 1 else "Unknown"
         bookmarks.append({
             "level": level,
-            "title": title,
+            "title": title.strip(),
             "page_num": page_num,
-            "y_coordinate": y_coordinate
+            "y_coordinate": "Unknown",
+        })
+    return bookmarks
+
+
+# ── Chapter extraction ────────────────────────────────────────────────────────
+
+
+def _build_chapter_chunks(
+    doc: fitz.Document,
+    toc: list[Bookmark],
+    total_pages: int,
+) -> list[ChapterChunk]:
+    """
+    Identify chapter-level entries in the TOC, compute page ranges, and
+    extract text for each chapter directly from the PDF pages.
+    """
+    # Find chapter page bounds (start of ch1 → end of last chapter)
+    chapter_entries = _find_chapter_entries(toc)
+
+    if not chapter_entries:
+        # No numbered chapters found — try using all top-level TOC entries
+        # that aren't front matter
+        chapter_entries = _find_top_level_content_entries(toc)
+
+    if not chapter_entries:
+        return []
+
+    # Build page ranges for each chapter
+    chunks: list[ChapterChunk] = []
+    for i, entry in enumerate(chapter_entries):
+        start_page = entry["page_num"]
+        if not isinstance(start_page, int):
+            continue
+
+        # End page = start of next chapter, or total pages
+        if i + 1 < len(chapter_entries):
+            next_page = chapter_entries[i + 1]["page_num"]
+            end_page = next_page if isinstance(next_page, int) else total_pages
+        else:
+            # For the last chapter, find the next TOC entry after it that's at
+            # the same or higher level (back-matter, appendix, etc.)
+            end_page = _find_end_page_for_last_chapter(
+                toc, entry, total_pages
+            )
+
+        # Clamp
+        start_page = max(0, min(start_page, total_pages - 1))
+        end_page = max(start_page + 1, min(end_page, total_pages))
+
+        text = _extract_page_range(doc, start_page, end_page)
+        if not text.strip():
+            continue
+
+        chunks.append({
+            "chapter_num": i + 1,
+            "chapter_title": entry["title"],
+            "text": _normalize_text(text),
+            "start_page": start_page,
+            "end_page": end_page,
         })
 
-    return bookmarks
+    return chunks
+
+
+def _find_chapter_entries(toc: list[Bookmark]) -> list[Bookmark]:
+    """
+    Find numbered chapter entries (e.g., "Chapter 1", "Chapter Two", "3 The
+    Beginning") in the TOC, returning only the main book body (ch1 → last
+    sequential chapter).
+    """
+    # Collect all entries that look like numbered chapters
+    numbered: list[tuple[int, int, Bookmark]] = []  # (toc_index, chapter_number, bookmark)
+    for idx, item in enumerate(toc):
+        if not isinstance(item["page_num"], int):
+            continue
+        if _is_front_matter_title(item["title"]):
+            continue
+        ch_num = _chapter_number(item["title"])
+        if ch_num is not None:
+            numbered.append((idx, ch_num, item))
+
+    if not numbered:
+        return []
+
+    # Find the entry for "Chapter 1"
+    ch1_candidates = [(idx, cn, bk) for idx, cn, bk in numbered if cn == 1]
+    if not ch1_candidates:
+        # No Chapter 1 found — use all numbered chapters
+        return [bk for _, _, bk in numbered]
+
+    # Use the first Chapter 1
+    ch1_idx = ch1_candidates[0][0]
+
+    # Determine the chapter level (TOC depth)
+    chapter_level = toc[ch1_idx]["level"]
+
+    # Walk forward from Chapter 1, collecting same-level chapters with
+    # monotonically increasing chapter numbers
+    result: list[Bookmark] = []
+    highest = 0
+    started = False
+
+    for idx, cn, bk in numbered:
+        if bk["level"] != chapter_level:
+            continue
+        if not started:
+            if idx == ch1_idx:
+                started = True
+            else:
+                continue
+        if cn < highest:
+            break  # hit a second "Chapter 1" or numbering reset → stop
+        highest = max(highest, cn)
+        result.append(bk)
+
+    return result
+
+
+def _find_top_level_content_entries(toc: list[Bookmark]) -> list[Bookmark]:
+    """
+    Fallback: when no numbered chapters are found, use all top-level TOC
+    entries that aren't front/back matter.
+    """
+    if not toc:
+        return []
+
+    min_level = min(item["level"] for item in toc)
+    entries = []
+    for item in toc:
+        if item["level"] != min_level:
+            continue
+        if not isinstance(item["page_num"], int):
+            continue
+        if _is_front_matter_title(item["title"]):
+            continue
+        if _is_back_matter_title(item["title"]):
+            continue
+        entries.append(item)
+
+    return entries
+
+
+def _find_end_page_for_last_chapter(
+    toc: list[Bookmark],
+    last_chapter_entry: Bookmark,
+    total_pages: int,
+) -> int:
+    """
+    For the last chapter, look for the next TOC entry at the same or higher
+    (lower number) level that comes after it — typically back-matter like
+    "Appendix", "Glossary", "About the Author", etc.
+    """
+    chapter_level = last_chapter_entry["level"]
+    chapter_page = last_chapter_entry["page_num"]
+    if not isinstance(chapter_page, int):
+        return total_pages
+
+    found_self = False
+    for item in toc:
+        if item is last_chapter_entry:
+            found_self = True
+            continue
+        if not found_self:
+            continue
+        # Only consider entries at same or higher level (same or lower number)
+        if item["level"] > chapter_level:
+            continue
+        page = item["page_num"]
+        if isinstance(page, int) and page > chapter_page:
+            return page
+
+    return total_pages
+
+
+# ── Text extraction ───────────────────────────────────────────────────────────
+
+
+def _extract_page_range(doc: fitz.Document, start: int, end: int) -> str:
+    """Extract text from pages [start, end) using PyMuPDF."""
+    parts: list[str] = []
+    for i in range(start, min(end, len(doc))):
+        page_text = doc[i].get_text("text")
+        if page_text:
+            parts.append(page_text)
+    return "\n".join(parts)
+
+
+# ── Text normalization ────────────────────────────────────────────────────────
 
 
 def _normalize_text(text: str) -> str:
     normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+    # Re-join hyphenated line breaks (e.g., "com-\nputer" → "computer")
     normalized = re.sub(r"-\n(?=[a-z])", "", normalized)
+    # Collapse excessive blank lines
     normalized = re.sub(r"\n{3,}", "\n\n", normalized)
     return normalized.strip()
 
 
-def _find_chapter_page_bounds(
-    toc: list[Bookmark],
-    total_pages: int,
-) -> tuple[int, int] | None:
-    chapter_entries: list[tuple[int, int]] = []
-
-    for idx, item in enumerate(toc):
-        page_num = item["page_num"]
-        if not isinstance(page_num, int):
-            continue
-        if _is_front_matter_title(item["title"]):
-            continue
-        if _chapter_number(item["title"]) is not None:
-            chapter_entries.append((idx, page_num))
-
-    if not chapter_entries:
-        return None
-
-    first_chapter_one_idx = next(
-        (idx for idx, _ in chapter_entries if _chapter_number(toc[idx]["title"]) == 1), None
-    )
-    if first_chapter_one_idx is None:
-        return None
-
-    start_page = toc[first_chapter_one_idx]["page_num"]
-    if not isinstance(start_page, int):
-        return None
-
-    chapter_level = min(toc[idx]["level"] for idx, _ in chapter_entries)
-
-    top_level_chapters = [
-        (idx, pg) for idx, pg in chapter_entries
-        if toc[idx]["level"] == chapter_level
-    ]
-
-    main_book_chapters = []
-    highest_chapter = 0
-    started = False
-
-    for idx, pg in top_level_chapters:
-        c_num = _chapter_number(toc[idx]["title"])
-        if c_num is None:
-            continue
-
-        if not started:
-            if idx == first_chapter_one_idx:
-                started = True
-            else:
-                continue  # Ignore any chapters that appear before the first Chapter 1
-
-        if c_num < highest_chapter:
-            break
-
-        highest_chapter = max(highest_chapter, c_num)
-        main_book_chapters.append((idx, pg))
-
-    last_top_chapter_idx = main_book_chapters[-1][0]
-    
-    end_page = total_pages
-    for i in range(last_top_chapter_idx + 1, len(toc)):
-        if toc[i]["level"] > chapter_level:
-            continue 
-
-        page_num = toc[i]["page_num"]
-        if isinstance(page_num, int):
-            end_page = page_num
-            break
-
-    end_page = max(start_page + 1, min(total_pages, end_page))
-    return start_page, end_page
+# ── Title classification ─────────────────────────────────────────────────────
 
 
-def _chapter_number(title: str) -> int | None:
-    match = re.search(r"\bchapter\s+([0-9]+)\b", title, re.IGNORECASE)
-    if match:
-        return int(match.group(1))
+_FRONT_MATTER_TERMS = frozenset({
+    "copyright",
+    "title page",
+    "table of contents",
+    "contents",
+    "introduction",
+    "preface",
+    "acknowledgements",
+    "acknowledgments",
+    "foreword",
+    "epigraph",
+    "prologue",
+    "testimonials",
+    "praise",
+    "dedication",
+    "frontispiece",
+    "half title",
+    "also by",
+    "about the author",
+    "cover",
+})
 
-    number_words = {
-        "one": 1,
-        "two": 2,
-        "three": 3,
-        "four": 4,
-        "five": 5,
-        "six": 6,
-        "seven": 7,
-        "eight": 8,
-        "nine": 9,
-        "ten": 10,
-        "eleven": 11,
-        "twelve": 12,
-        "thirteen": 13,
-        "fourteen": 14,
-        "fifteen": 15,
-        "sixteen": 16,
-        "seventeen": 17,
-        "eighteen": 18,
-        "nineteen": 19,
-        "twenty": 20,
-        "twenty-one": 21,
-        "twenty-two": 22,
-        "twenty-three": 23,
-        "twenty-four": 24,
-        "twenty-five": 25,
-        "twenty-six": 26,
-        "twenty-seven": 27,
-        "twenty-eight": 28,
-        "twenty-nine": 29,
-        "thirty": 30,
-    }
-
-    _num_words_pattern = "|".join(number_words.keys())
-    word_match = re.search(rf"\bchapter\s+({_num_words_pattern})\b", title, re.IGNORECASE)
-    if word_match:
-        return number_words[word_match.group(1).lower()]
-
-    leading_number = re.match(r"^\s*(\d{1,3})\b", title)
-    if leading_number:
-        return int(leading_number.group(1))
-
-    leading_word = re.match(r"^\s*(one|two|three|four|five|six|seven|eight|nine|ten)\b", title, re.IGNORECASE)
-    if leading_word:
-        return number_words[leading_word.group(1).lower()]
-
-    return None
+_BACK_MATTER_TERMS = frozenset({
+    "appendix",
+    "glossary",
+    "bibliography",
+    "index",
+    "notes",
+    "endnotes",
+    "afterword",
+    "epilogue",
+    "about the author",
+    "also by",
+    "colophon",
+    "credits",
+    "further reading",
+    "reading guide",
+    "discussion questions",
+})
 
 
 def _is_front_matter_title(title: str) -> bool:
     normalized = re.sub(r"[^a-z0-9\s]", " ", title.lower())
     normalized = re.sub(r"\s+", " ", normalized).strip()
+    return any(term in normalized for term in _FRONT_MATTER_TERMS)
 
-    front_matter_terms = (
-        "copyright",
-        "title page",
-        "table of contents",
-        "contents",
-        "introduction",
-        "preface",
-        "acknowledgements",
-        "acknowledgments",
-        "foreword",
-        "epigraph",
-        "prologue",
-        "testimonials",
-        "praise",
-        "dedication",
-        "frontispiece",
+
+def _is_back_matter_title(title: str) -> bool:
+    normalized = re.sub(r"[^a-z0-9\s]", " ", title.lower())
+    normalized = re.sub(r"\s+", " ", normalized).strip()
+    return any(term in normalized for term in _BACK_MATTER_TERMS)
+
+
+# ── Chapter number extraction ────────────────────────────────────────────────
+
+_NUMBER_WORDS = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+    "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+    "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14,
+    "fifteen": 15, "sixteen": 16, "seventeen": 17, "eighteen": 18,
+    "nineteen": 19, "twenty": 20,
+    "twenty-one": 21, "twenty-two": 22, "twenty-three": 23,
+    "twenty-four": 24, "twenty-five": 25, "twenty-six": 26,
+    "twenty-seven": 27, "twenty-eight": 28, "twenty-nine": 29,
+    "thirty": 30, "thirty-one": 31, "thirty-two": 32,
+    "thirty-three": 33, "thirty-four": 34, "thirty-five": 35,
+    "thirty-six": 36, "thirty-seven": 37, "thirty-eight": 38,
+    "thirty-nine": 39, "forty": 40,
+}
+
+_NUM_WORDS_PATTERN = "|".join(
+    re.escape(w) for w in sorted(_NUMBER_WORDS.keys(), key=len, reverse=True)
+)
+
+
+def _chapter_number(title: str) -> int | None:
+    # "Chapter 5", "CHAPTER 12"
+    match = re.search(r"\bchapter\s+([0-9]+)\b", title, re.IGNORECASE)
+    if match:
+        return int(match.group(1))
+
+    # "Chapter One", "CHAPTER TWENTY-THREE"
+    word_match = re.search(
+        rf"\bchapter\s+({_NUM_WORDS_PATTERN})\b", title, re.IGNORECASE
     )
-    return any(term in normalized for term in front_matter_terms)
+    if word_match:
+        return _NUMBER_WORDS.get(word_match.group(1).lower())
 
+    # Leading number: "1 The Beginning", "12. A New Day"
+    leading_number = re.match(r"^\s*(\d{1,3})\b", title)
+    if leading_number:
+        return int(leading_number.group(1))
 
-def _find_first_content_page(toc: list[Bookmark]) -> int | str:
-    for item in toc:
-        if _is_front_matter_title(item["title"]):
-            continue
-
-        if isinstance(item["page_num"], int):
-            return item["page_num"]
-
-    return toc[0]["page_num"]
-
-
-def _get_page_ref_id(page_ref: Any) -> int | None:
-    for attr in ("objid", "pageid"):
-        value = getattr(page_ref, attr, None)
-        if isinstance(value, int):
-            return value
+    # Leading word number: "One", "Two"
+    leading_word = re.match(
+        rf"^\s*({_NUM_WORDS_PATTERN})\b", title, re.IGNORECASE
+    )
+    if leading_word:
+        return _NUMBER_WORDS.get(leading_word.group(1).lower())
 
     return None

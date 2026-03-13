@@ -3,6 +3,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from gremlin_python.driver.client import Client
+from integrations.azure.openai_client import get_openai_client
 
 from api import router as api_router
 from config import (
@@ -15,9 +16,36 @@ from config import (
 )
 
 
-logging.basicConfig(level=logging.INFO, format="%(message)s")
+# ── Logging setup ─────────────────────────────────────────────────────────────
+# Root logger at INFO with a compact format — no headers, no request bodies.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s  %(levelname)-7s  %(name)s  %(message)s",
+    datefmt="%H:%M:%S",
+)
+
+# Silence the chatty third-party loggers that dump full HTTP headers/bodies
+for _noisy in (
+    "azure",                     # azure-core, azure-cosmos, azure-storage, azure-identity
+    "azure.core.pipeline",       # full request/response traces
+    "azure.identity",            # token acquisition chatter
+    "httpx",                     # request lines + headers
+    "httpcore",                  # low-level connection logs
+    "openai",                    # OpenAI SDK internals
+    "urllib3",                   # connection pool noise
+    "uvicorn.access",            # per-request access log (FastAPI already logs routes)
+    "uvicorn.error",             # startup/shutdown only — keep at WARNING
+    "websockets",                # gremlin websocket chatter
+    "gremlinpython",             # gremlin driver internals
+    "charset_normalizer",        # encoding detection noise
+    "msal",                      # MSAL token cache logs
+):
+    logging.getLogger(_noisy).setLevel(logging.WARNING)
+
+# Keep uvicorn's lifespan messages (startup/shutdown) visible
+logging.getLogger("uvicorn").setLevel(logging.INFO)
+
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 
 def create_app() -> FastAPI:
@@ -33,6 +61,15 @@ def create_app() -> FastAPI:
 
     @app.on_event("startup")
     async def startup_gremlin_client() -> None:
+        openai_client = get_openai_client()
+        if openai_client is None:
+            logger.warning(
+                "OpenAI client not configured. "
+                "Set OPENAI_API_KEY in your .env file."
+            )
+        else:
+            logger.info("OpenAI client initialised.")
+        app.state.openai_client = openai_client
         if not is_gremlin_configured():
             logger.warning(
                 "Gremlin not configured. Set GREMLIN_ENDPOINT and GREMLIN_KEY."
