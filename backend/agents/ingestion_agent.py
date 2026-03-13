@@ -15,7 +15,7 @@ from services.parse_service import parse_and_clean
 logger = logging.getLogger(__name__)
 
 # Max concurrent OpenAI calls to avoid rate-limit errors
-_MAX_CONCURRENT_LLM_CALLS = 3
+_MAX_CONCURRENT_LLM_CALLS = 1
 
 # Max characters of chapter text to send to the LLM per call.
 # gpt-4o-mini supports 128K context; ~40K chars ≈ ~10K tokens leaves plenty
@@ -40,7 +40,7 @@ class IngestionAgent:
         if self.openai is None:
             raise RuntimeError(
                 "OpenAI client is not configured. "
-                "Set OPENAI_ENDPOINT + PROJECT_KEY in your .env file."
+                "Set OPENAI_API_KEY in your .env file."
             )
         update_job_status(
             self.job_id,
@@ -197,9 +197,10 @@ class IngestionAgent:
         )
 
         response = await self.openai.chat.completions.create(
-            model=os.getenv("OPENAI_DEPLOYMENT", "gpt-4o-mini"),
+            model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
+            timeout=60.0,
         )
 
         raw_content = response.choices[0].message.content

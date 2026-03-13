@@ -65,8 +65,7 @@ def create_app() -> FastAPI:
         if openai_client is None:
             logger.warning(
                 "OpenAI client not configured. "
-                "Set OPENAI_ENDPOINT + PROJECT_KEY (direct) "
-                "or PROJECT_ENDPOINT (Foundry)."
+                "Set OPENAI_API_KEY in your .env file."
             )
         else:
             logger.info("OpenAI client initialised.")
