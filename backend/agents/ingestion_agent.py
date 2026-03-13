@@ -10,10 +10,21 @@ from integrations.cosmos.cosmos_repository import (
     update_job_status,
     upsert_chapter,
 )
-from services.parse_service import Bookmark, parse_and_clean
+from services.parse_service import parse_and_clean
 
 logger = logging.getLogger(__name__)
 
+# Max concurrent OpenAI calls to avoid rate-limit errors
+_MAX_CONCURRENT_LLM_CALLS = 3
+
+# Max characters of chapter text to send to the LLM per call.
+# gpt-4o-mini supports 128K context; ~40K chars ≈ ~10K tokens leaves plenty
+# of room for the prompt template and the JSON response.
+_MAX_CHAPTER_CHARS = 40_000
+
+# Retry configuration
+_MAX_RETRIES = 3
+_RETRY_BASE_DELAY = 2.0  # seconds, doubles each retry
 
 
 class IngestionAgent:
@@ -21,6 +32,9 @@ class IngestionAgent:
     def __init__(self, openai_client, job_id: str):
         self.openai = openai_client
         self.job_id = job_id
+        self._semaphore = asyncio.Semaphore(_MAX_CONCURRENT_LLM_CALLS)
+
+    # ── Public entry point ────────────────────────────────────────────────
 
     async def run(self, blob_name: str) -> str:
         if self.openai is None:
@@ -28,13 +42,21 @@ class IngestionAgent:
                 "OpenAI client is not configured. "
                 "Set OPENAI_ENDPOINT + PROJECT_KEY in your .env file."
             )
-        update_job_status(self.job_id, status="in_progress", current_agent="ingestion_agent")
+        update_job_status(
+            self.job_id,
+            status="in_progress",
+            current_agent="ingestion_agent",
+        )
 
         try:
             pdf_bytes = self._download_pdf(blob_name)
-            raw_text, toc = self._parse_pdf(pdf_bytes)
-            chunks = self._chunk_by_chapter(raw_text, toc)
-            await self._extract_all_chapters(chunks)
+            chapters = self._parse_pdf(pdf_bytes)
+            logger.info(
+                "[IngestionAgent] job=%s  parsed %d chapters",
+                self.job_id,
+                len(chapters),
+            )
+            await self._extract_all_chapters(chapters)
             update_job_status(
                 self.job_id,
                 status="ingestion_complete",
@@ -42,10 +64,15 @@ class IngestionAgent:
                 completed_agents=["ingestion_agent"],
             )
         except Exception as e:
+            logger.exception(
+                "[IngestionAgent] job=%s  ingestion failed", self.job_id
+            )
             update_job_status(self.job_id, status="failed", error=str(e))
             raise
 
         return self.job_id
+
+    # ── Download ──────────────────────────────────────────────────────────
 
     def _download_pdf(self, blob_name: str) -> bytes:
         pdf_bytes = download_blob_bytes(blob_name)
@@ -53,47 +80,60 @@ class IngestionAgent:
             raise RuntimeError(f"Blob '{blob_name}' was found but is empty")
         return pdf_bytes
 
-    def _parse_pdf(self, pdf_bytes: bytes) -> tuple[str, list[Bookmark]]:
+    # ── Parse ─────────────────────────────────────────────────────────────
+
+    def _parse_pdf(self, pdf_bytes: bytes) -> list[dict]:
+        """
+        Returns a list of chapter dicts, each with keys:
+            chapter_num, chapter_title, text, start_page, end_page
+        """
         result = parse_and_clean(pdf_bytes)
         if "error" in result:
             raise RuntimeError(f"parse_service failed: {result['error']}")
-        return result["text"], result["full_toc"]
 
-    def _chunk_by_chapter(self, raw_text: str, toc: list[Bookmark]) -> list[dict]:
-        chunks = []
+        chapters = result.get("chapters", [])
+        if not chapters:
+            raise RuntimeError("parse_service returned no chapters")
 
-        chapter_toc = [t for t in toc if isinstance(t["page_num"], int)]
+        return chapters
 
-        for i, entry in enumerate(chapter_toc):
-            title = entry["title"]
-            start_idx = raw_text.find(title)
-            if start_idx == -1:
-                continue
+    # ── LLM extraction (with concurrency control + retry) ─────────────────
 
-            end_idx = len(raw_text)
-            if i + 1 < len(chapter_toc):
-                next_title = chapter_toc[i + 1]["title"]
-                next_idx = raw_text.find(next_title, start_idx + len(title))
-                if next_idx != -1:
-                    end_idx = next_idx
+    async def _extract_all_chapters(self, chapters: list[dict]) -> list[dict]:
+        """Process all chapters with bounded concurrency."""
+        tasks = [self._extract_and_save(ch) for ch in chapters]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
 
-            chunks.append({
-                "chapter_num": i + 1,
-                "chapter_title": title,
-                "text": raw_text[start_idx:end_idx].strip(),
-            })
+        # Log any per-chapter failures but don't abort the whole job
+        failures = 0
+        for i, res in enumerate(results):
+            if isinstance(res, Exception):
+                failures += 1
+                logger.error(
+                    "[IngestionAgent] job=%s  chapter %d failed: %s",
+                    self.job_id,
+                    i + 1,
+                    res,
+                )
 
-        if not chunks:
-            chunks = [{"chapter_num": 1, "chapter_title": "Full Text", "text": raw_text}]
+        if failures == len(chapters):
+            raise RuntimeError(
+                f"All {failures} chapters failed during LLM extraction"
+            )
+        if failures:
+            logger.warning(
+                "[IngestionAgent] job=%s  %d/%d chapters had errors",
+                self.job_id,
+                failures,
+                len(chapters),
+            )
 
-        return chunks
-
-    async def _extract_all_chapters(self, chunks: list[dict]) -> list[dict]:
-        tasks = [self._extract_and_save(chunk) for chunk in chunks]
-        return await asyncio.gather(*tasks)
+        return [r for r in results if not isinstance(r, Exception)]
 
     async def _extract_and_save(self, chunk: dict) -> dict:
-        result = await self._extract_chapter_data(chunk)
+        async with self._semaphore:
+            result = await self._extract_chapter_data_with_retry(chunk)
+
         upsert_chapter(
             job_id=self.job_id,
             chapter_num=result["chapter_num"],
@@ -104,29 +144,57 @@ class IngestionAgent:
             raw_text=result["raw_text"],
         )
         logger.info(
-            "[IngestionAgent] job=%s chapter=%d saved",
+            "[IngestionAgent] job=%s  chapter=%d '%s' saved",
             self.job_id,
             result["chapter_num"],
+            result["chapter_title"],
         )
         return result
 
+    async def _extract_chapter_data_with_retry(self, chunk: dict) -> dict:
+        """Call the LLM with exponential-backoff retry."""
+        last_exc: Exception | None = None
+        for attempt in range(1, _MAX_RETRIES + 1):
+            try:
+                return await self._extract_chapter_data(chunk)
+            except Exception as exc:
+                last_exc = exc
+                if attempt < _MAX_RETRIES:
+                    delay = _RETRY_BASE_DELAY * (2 ** (attempt - 1))
+                    logger.warning(
+                        "[IngestionAgent] job=%s  chapter=%d  attempt %d/%d "
+                        "failed (%s), retrying in %.1fs",
+                        self.job_id,
+                        chunk["chapter_num"],
+                        attempt,
+                        _MAX_RETRIES,
+                        exc,
+                        delay,
+                    )
+                    await asyncio.sleep(delay)
+
+        raise RuntimeError(
+            f"Chapter {chunk['chapter_num']} failed after {_MAX_RETRIES} "
+            f"attempts: {last_exc}"
+        ) from last_exc
+
     async def _extract_chapter_data(self, chunk: dict) -> dict:
-        prompt = f"""You are a literary analyst. Given the following chapter text, extract:
-        1. A 3-5 bullet summary of the chapter
-        2. A list of key events (each as a short sentence)
-        3. Every character mentioned (names only)
+        chapter_text = chunk["text"][:_MAX_CHAPTER_CHARS]
 
-        Respond in JSON with exactly this shape:
-        {{
-        "summary": ["bullet 1", "bullet 2"],
-        "key_events": ["event 1", "event 2"],
-        "characters": ["Name1", "Name2"]
-        }}
-
-        Chapter: {chunk['chapter_title']}
-
-        Text:
-        {chunk['text'][:8000]}"""
+        prompt = (
+            "You are a literary analyst. Given the following chapter text, extract:\n"
+            "1. A 3-5 bullet summary of the chapter\n"
+            "2. A list of key events (each as a short sentence)\n"
+            "3. Every character mentioned (names only)\n\n"
+            "Respond in JSON with exactly this shape:\n"
+            "{\n"
+            '  "summary": ["bullet 1", "bullet 2"],\n'
+            '  "key_events": ["event 1", "event 2"],\n'
+            '  "characters": ["Name1", "Name2"]\n'
+            "}\n\n"
+            f"Chapter: {chunk['chapter_title']}\n\n"
+            f"Text:\n{chapter_text}"
+        )
 
         response = await self.openai.chat.completions.create(
             model=os.getenv("OPENAI_DEPLOYMENT", "gpt-4o-mini"),
@@ -134,7 +202,8 @@ class IngestionAgent:
             response_format={"type": "json_object"},
         )
 
-        extracted = json.loads(response.choices[0].message.content)
+        raw_content = response.choices[0].message.content
+        extracted = json.loads(raw_content)
 
         return {
             "chapter_num": chunk["chapter_num"],

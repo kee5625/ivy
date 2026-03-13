@@ -1,0 +1,98 @@
+karth  backend  ➜ (feat/pdf-ingestion)  ♥ 10:54  uv run -m app
+C:\Users\karth\OneDrive\Desktop\Projects\ivy\backend\app.py:62: DeprecationWarning:
+        on_event is deprecated, use lifespan event handlers instead.
+
+        Read more about it in the
+        [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+  @app.on_event("startup")
+C:\Users\karth\OneDrive\Desktop\Projects\ivy\backend\app.py:88: DeprecationWarning:
+        on_event is deprecated, use lifespan event handlers instead.
+
+        Read more about it in the
+        [FastAPI docs for Lifespan Events](https://fastapi.tiangolo.com/advanced/events/).
+
+  @app.on_event("shutdown")
+INFO:     Started server process [9616]
+INFO:     Waiting for application startup.
+10:55:54  INFO     __main__  OpenAI client initialised.
+10:55:54  INFO     __main__  Gremlin client initialized for db=ivy-db graph=storygraph
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+INFO:     127.0.0.1:48999 - "GET /jobs/900e2681f3bc4c278bb0c940db9accb0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49001 - "GET /jobs/900e2681f3bc4c278bb0c940db9accb0/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49002 - "GET /jobs/900e2681f3bc4c278bb0c940db9accb0/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49003 - "GET /jobs/900e2681f3bc4c278bb0c940db9accb0/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49004 - "GET /jobs/900e2681f3bc4c278bb0c940db9accb0/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:10949 - "GET /jobs/900e2681f3bc4c278bb0c940db9accb0/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45899 - "GET /jobs/900e2681f3bc4c278bb0c940db9accb0 HTTP/1.1" 200 OK
+INFO:     127.0.0.1:26643 - "GET /jobs/900e2681f3bc4c278bb0c940db9accb0/chapters HTTP/1.1" 200 OK
+10:56:29  INFO     api.routes.document  Uploaded blob: uploads/2026/03/11/48f46066c93747b6bd6060acca87e54e.pdf
+10:56:32  INFO     api.routes.document  Created job: 09cb826c1fe44b62aeb54ca4999acfac
+10:56:32  INFO     api.routes.document  Ingestion agent queued for job: 09cb826c1fe44b62aeb54ca4999acfac
+INFO:     127.0.0.1:32154 - "POST /pdf/upload HTTP/1.1" 200 OK
+10:56:50  INFO     agents.ingestion_agent  [IngestionAgent] job=09cb826c1fe44b62aeb54ca4999acfac  parsed 17 chapters
+INFO:     127.0.0.1:54198 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac HTTP/1.1" 200 OK
+INFO:     127.0.0.1:54199 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:17551 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac HTTP/1.1" 200 OK
+INFO:     127.0.0.1:43486 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59578 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44842 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:24123 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53985 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48638 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36153 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+10:57:16  WARNING  agents.ingestion_agent  [IngestionAgent] job=09cb826c1fe44b62aeb54ca4999acfac  chapter=2  attempt 1/3 failed (Request timed out.), retrying in 2.0s
+10:57:16  WARNING  agents.ingestion_agent  [IngestionAgent] job=09cb826c1fe44b62aeb54ca4999acfac  chapter=1  attempt 1/3 failed (Request timed out.), retrying in 2.0s
+10:57:16  WARNING  agents.ingestion_agent  [IngestionAgent] job=09cb826c1fe44b62aeb54ca4999acfac  chapter=3  attempt 1/3 failed (Request timed out.), retrying in 2.0s
+INFO:     127.0.0.1:29312 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39664 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:57498 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35614 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:23817 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac HTTP/1.1" 200 OK
+INFO:     127.0.0.1:32920 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:15553 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34280 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:28076 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac HTTP/1.1" 200 OK
+INFO:     127.0.0.1:28495 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:30306 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37578 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac HTTP/1.1" 200 OK
+10:57:48  WARNING  agents.ingestion_agent  [IngestionAgent] job=09cb826c1fe44b62aeb54ca4999acfac  chapter=3  attempt 2/3 failed (Request timed out.), retrying in 4.0s
+10:57:48  WARNING  agents.ingestion_agent  [IngestionAgent] job=09cb826c1fe44b62aeb54ca4999acfac  chapter=2  attempt 2/3 failed (Request timed out.), retrying in 4.0s
+10:57:48  WARNING  agents.ingestion_agent  [IngestionAgent] job=09cb826c1fe44b62aeb54ca4999acfac  chapter=1  attempt 2/3 failed (Request timed out.), retrying in 4.0s
+INFO:     127.0.0.1:45763 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:52881 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:12796 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:40049 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38534 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38535 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:58734 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:3793 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36045 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33646 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:33647 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:2915 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:48433 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:36787 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59500 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac HTTP/1.1" 200 OK
+INFO:     127.0.0.1:1896 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62321 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:62593 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:1072 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:19390 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:34382 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:31400 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:45342 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37027 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:20059 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac HTTP/1.1" 200 OK
+INFO:     127.0.0.1:39933 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:20881 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41714 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:30098 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:53013 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:60079 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41642 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:38758 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64163 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49243 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41301 - "GET /jobs/09cb826c1fe44b62aeb54ca4999acfac/chapters HTTP/1.1" 200 OK

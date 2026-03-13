@@ -16,9 +16,36 @@ from config import (
 )
 
 
-logging.basicConfig(level=logging.DEBUG, format="%(levelname)-8s %(name)s: %(message)s")
+# ── Logging setup ─────────────────────────────────────────────────────────────
+# Root logger at INFO with a compact format — no headers, no request bodies.
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s  %(levelname)-7s  %(name)s  %(message)s",
+    datefmt="%H:%M:%S",
+)
+
+# Silence the chatty third-party loggers that dump full HTTP headers/bodies
+for _noisy in (
+    "azure",                     # azure-core, azure-cosmos, azure-storage, azure-identity
+    "azure.core.pipeline",       # full request/response traces
+    "azure.identity",            # token acquisition chatter
+    "httpx",                     # request lines + headers
+    "httpcore",                  # low-level connection logs
+    "openai",                    # OpenAI SDK internals
+    "urllib3",                   # connection pool noise
+    "uvicorn.access",            # per-request access log (FastAPI already logs routes)
+    "uvicorn.error",             # startup/shutdown only — keep at WARNING
+    "websockets",                # gremlin websocket chatter
+    "gremlinpython",             # gremlin driver internals
+    "charset_normalizer",        # encoding detection noise
+    "msal",                      # MSAL token cache logs
+):
+    logging.getLogger(_noisy).setLevel(logging.WARNING)
+
+# Keep uvicorn's lifespan messages (startup/shutdown) visible
+logging.getLogger("uvicorn").setLevel(logging.INFO)
+
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 
 def create_app() -> FastAPI:
