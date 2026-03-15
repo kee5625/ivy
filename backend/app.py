@@ -3,7 +3,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from gremlin_python.driver.client import Client
-from integrations.azure.openai_client import get_openai_client
+from integrations.azure.openai_client import close_openai_client, get_openai_client
 
 from api import router as api_router
 from config import (
@@ -61,14 +61,24 @@ def create_app() -> FastAPI:
 
     @app.on_event("startup")
     async def startup_gremlin_client() -> None:
-        openai_client = get_openai_client()
-        if openai_client is None:
+        try:
+            openai_client = await get_openai_client()
+        except Exception as exc:
+            openai_client = None
             logger.warning(
-                "OpenAI client not configured. "
-                "Set OPENAI_API_KEY in your .env file."
+                "Azure AI Foundry client initialization failed. "
+                "Set PROJECT_KEY and OPENAI_ENDPOINT (or PROJECT_ENDPOINT). "
+                "Error: %s",
+                exc,
             )
         else:
-            logger.info("OpenAI client initialised.")
+            if openai_client is None:
+                logger.warning(
+                    "Azure AI Foundry client not configured. "
+                    "Set PROJECT_KEY and OPENAI_ENDPOINT (or PROJECT_ENDPOINT)."
+                )
+            else:
+                logger.info("Azure AI Foundry client initialised.")
         app.state.openai_client = openai_client
         if not is_gremlin_configured():
             logger.warning(
@@ -86,6 +96,7 @@ def create_app() -> FastAPI:
 
     @app.on_event("shutdown")
     async def shutdown_gremlin_client() -> None:
+        await close_openai_client()
         gremlin_client: Client | None = getattr(app.state, "gremlin_client", None)
         if gremlin_client is not None:
             gremlin_client.close()
