@@ -215,12 +215,18 @@ async def test_plot_hole_retries_once_after_timeout_then_succeeds(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("PLOT_HOLE_MAX_RETRIES", "2")
+
+    async def fake_sleep(_: float) -> None:
+        return None
+
+    monkeypatch.setattr("agents.plot_hole_agent.asyncio.sleep", fake_sleep)
     attempts = {"count": 0}
     agent = PlotHoleAgent(openai_client=object(), job_id="job-timeout")
 
     async def fake_request(
         story_state: dict[str, object],
         attempt: int,
+        model_name: str,
     ) -> list[dict[str, object]]:
         attempts["count"] += 1
         if attempts["count"] == 1:
@@ -243,6 +249,53 @@ async def test_plot_hole_retries_once_after_timeout_then_succeeds(
 
     assert attempts["count"] == 2
     assert result[0]["hole_type"] == "timeline_paradox"
+
+
+@pytest.mark.asyncio
+async def test_plot_hole_retries_with_fallback_model_after_rate_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PLOT_HOLE_MODEL", "gpt-4.1")
+    monkeypatch.setenv("PLOT_HOLE_FALLBACK_MODEL", "gpt-4o-mini")
+    monkeypatch.setenv("PLOT_HOLE_MAX_RETRIES", "2")
+    sleep_calls: list[float] = []
+    models: list[str] = []
+
+    async def fake_sleep(delay: float) -> None:
+        sleep_calls.append(delay)
+
+    monkeypatch.setattr("agents.plot_hole_agent.asyncio.sleep", fake_sleep)
+    agent = PlotHoleAgent(openai_client=object(), job_id="job-rate-limit")
+
+    async def fake_request(
+        story_state: dict[str, object],
+        attempt: int,
+        model_name: str,
+    ) -> list[dict[str, object]]:
+        models.append(model_name)
+        if attempt == 1:
+            raise RuntimeError(
+                "Rate limit reached. Please try again in 6.5s. code=rate_limit_exceeded"
+            )
+        return [
+            {
+                "hole_type": "location_conflict",
+                "severity": "medium",
+                "description": "A location contradiction exists.",
+                "chapters_involved": [2],
+                "characters_involved": ["Mira"],
+                "events_involved": ["evt_002"],
+                "confidence": 0.81,
+            }
+        ]
+
+    monkeypatch.setattr(agent, "_request_plot_holes", fake_request)
+
+    result = await agent._extract_plot_holes_with_retry(_story_state())
+
+    assert models == ["gpt-4.1", "gpt-4o-mini"]
+    assert sleep_calls == [7.0]
+    assert result[0]["hole_type"] == "location_conflict"
 
 
 @pytest.mark.asyncio

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
+import re
 import time
 from typing import Any
 
@@ -31,10 +33,21 @@ _DEFAULT_CONFIDENCE_THRESHOLD = 0.72
 _MAX_CHAPTERS_FOR_PROMPT = 200
 _MAX_TIMELINE_EVENTS_FOR_PROMPT = 120
 _MAX_SUMMARY_ITEMS = 3
-_MAX_KEY_EVENTS = 3
-_MAX_CHARACTERS = 8
-_MAX_TEMPORAL_MARKERS = 4
+_MAX_KEY_EVENTS = 2
+_MAX_CHARACTERS = 5
+_MAX_TEMPORAL_MARKERS = 3
+_MAX_ENTITY_ALIASES = 2
+_MAX_ENTITY_CHAPTERS = 6
+_MAX_TIMELINE_CHARACTERS = 4
 _MAX_DESCRIPTION_CHARS = 240
+_MAX_SUMMARY_TEXT_CHARS = 240
+_MAX_EVENT_DESCRIPTION_CHARS = 160
+_MAX_LOCATION_CHARS = 60
+_MAX_TIME_REFERENCE_CHARS = 60
+_MAX_RELATIVE_TIME_ANCHOR_CHARS = 60
+_MAX_ENTITY_NAME_CHARS = 60
+_MAX_ENTITY_COUNT = 80
+_RATE_LIMIT_DELAY_PATTERN = re.compile(r"try again in ([0-9]+(?:\.[0-9]+)?)s", re.IGNORECASE)
 
 
 def _get_int_env(name: str, default: int) -> int:
@@ -54,7 +67,11 @@ def _get_float_env(name: str, default: float) -> float:
 
 
 def _plot_hole_model() -> str:
-    return os.getenv("PLOT_HOLE_MODEL", "gpt-4.1")
+    return os.getenv("PLOT_HOLE_MODEL", "gpt-4o-mini")
+
+
+def _plot_hole_fallback_model() -> str:
+    return os.getenv("PLOT_HOLE_FALLBACK_MODEL", "gpt-4o-mini")
 
 
 def _plot_hole_timeout_seconds() -> float:
@@ -67,6 +84,17 @@ def _plot_hole_max_retries() -> int:
 
 def _plot_hole_max_findings() -> int:
     return _get_int_env("PLOT_HOLE_MAX_FINDINGS", 5)
+
+
+def _plot_hole_retry_base_delay_seconds() -> float:
+    return _get_float_env("PLOT_HOLE_RETRY_BASE_DELAY_SECONDS", 2.0)
+
+
+def _plot_hole_confidence_threshold() -> float:
+    return _get_float_env(
+        "PLOT_HOLE_CONFIDENCE_THRESHOLD",
+        _DEFAULT_CONFIDENCE_THRESHOLD,
+    )
 
 
 def _is_timeout_error(exc: Exception) -> bool:
@@ -163,28 +191,44 @@ class PlotHoleAgent:
         last_exc: Exception | None = None
         retry_count = _plot_hole_max_retries()
         for attempt in range(1, retry_count + 1):
+            model_name = self._model_for_attempt(attempt)
             try:
-                return await self._request_plot_holes(story_state, attempt)
+                return await self._request_plot_holes(story_state, attempt, model_name)
             except Exception as exc:
                 last_exc = exc
                 if attempt >= retry_count:
                     break
 
+                delay = self._retry_delay_seconds(exc, attempt)
                 if _is_timeout_error(exc):
                     logger.warning(
-                        "[PlotHoleAgent] job=%s attempt %d/%d timed out; retrying",
+                        "[PlotHoleAgent] job=%s attempt %d/%d timed out on model=%s; retrying in %.2fs",
                         self.job_id,
                         attempt,
                         retry_count,
+                        model_name,
+                        delay,
+                    )
+                elif self._is_rate_limit_error(exc):
+                    logger.warning(
+                        "[PlotHoleAgent] job=%s attempt %d/%d hit rate limits on model=%s; retrying in %.2fs",
+                        self.job_id,
+                        attempt,
+                        retry_count,
+                        model_name,
+                        delay,
                     )
                 else:
                     logger.warning(
-                        "[PlotHoleAgent] job=%s attempt %d/%d failed; retrying: %r",
+                        "[PlotHoleAgent] job=%s attempt %d/%d failed on model=%s; retrying in %.2fs: %r",
                         self.job_id,
                         attempt,
                         retry_count,
+                        model_name,
+                        delay,
                         exc,
                     )
+                await asyncio.sleep(delay)
         raise RuntimeError(
             f"Plot-hole analysis failed after {retry_count} attempt(s): {repr(last_exc)}"
         ) from last_exc
@@ -193,13 +237,14 @@ class PlotHoleAgent:
         self,
         story_state: dict[str, Any],
         attempt: int,
+        model_name: str,
     ) -> list[dict[str, Any]]:
         payload = self._build_prompt_payload(story_state)
         payload_bytes = len(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
         logger.info(
             "[PlotHoleAgent] job=%s sending plot-hole request to model=%s attempt=%d/%d payload_bytes=%d",
             self.job_id,
-            _plot_hole_model(),
+            model_name,
             attempt,
             _plot_hole_max_retries(),
             payload_bytes,
@@ -224,7 +269,7 @@ class PlotHoleAgent:
         )
 
         response = await self.openai.chat.completions.create(
-            model=_plot_hole_model(),
+            model=model_name,
             messages=[{"role": "user", "content": prompt}],
             response_format=self._response_format(),
             timeout=_plot_hole_timeout_seconds(),
@@ -238,21 +283,63 @@ class PlotHoleAgent:
     def _build_prompt_payload(self, story_state: dict[str, Any]) -> dict[str, Any]:
         chapters = story_state.get("chapters", [])
         timeline = story_state.get("timeline", [])
-        entities = story_state.get("entities", [])
+        entities = self._select_entities_for_prompt(story_state.get("entities", []))
 
         return {
+            "story_end": self._build_story_end_payload(story_state),
             "chapters": [self._build_chapter_payload(chapter) for chapter in chapters],
             "timeline_events": [self._build_timeline_payload(event) for event in timeline],
             "entities": [self._build_entity_payload(entity) for entity in entities],
         }
 
+    def _select_entities_for_prompt(
+        self,
+        entities: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        prioritized = sorted(
+            entities,
+            key=lambda entity: (
+                0
+                if str(entity.get("entity_type", "")).strip() == "character"
+                else 1,
+                str(entity.get("name", "")).lower(),
+            ),
+        )
+        return prioritized[:_MAX_ENTITY_COUNT]
+
+    def _build_story_end_payload(self, story_state: dict[str, Any]) -> dict[str, Any]:
+        chapters = story_state.get("chapters", [])
+        timeline = story_state.get("timeline", [])
+        final_chapter_num = 0
+        if chapters:
+            final_chapter_num = max(
+                int(chapter.get("chapter_num", 0) or 0) for chapter in chapters
+            )
+        final_event_id = None
+        if timeline:
+            final_event_id = str(timeline[-1].get("event_id", "")).strip() or None
+
+        return {
+            "final_chapter_num": final_chapter_num,
+            "final_event_id": final_event_id,
+            "timeline_event_count": len(timeline),
+        }
+
     def _build_chapter_payload(self, chapter: dict[str, Any]) -> dict[str, Any]:
+        summary_items = self._clean_string_list(chapter.get("summary"), limit=_MAX_SUMMARY_ITEMS)
+        summary_text = self._trim_text(" ".join(summary_items), _MAX_SUMMARY_TEXT_CHARS)
         return {
             "chapter_num": int(chapter.get("chapter_num", 0)),
-            "chapter_title": str(chapter.get("chapter_title", "")).strip(),
-            "summary": self._clean_string_list(chapter.get("summary"), limit=_MAX_SUMMARY_ITEMS),
+            "chapter_title": self._trim_text(
+                str(chapter.get("chapter_title", "")).strip(),
+                _MAX_LOCATION_CHARS,
+            ),
+            "summary_text": summary_text,
             "key_events": self._clean_string_list(
-                chapter.get("key_events"),
+                [
+                    self._trim_text(value, _MAX_EVENT_DESCRIPTION_CHARS)
+                    for value in chapter.get("key_events", [])
+                ],
                 limit=_MAX_KEY_EVENTS,
             ),
             "characters": self._clean_string_list(
@@ -270,25 +357,43 @@ class PlotHoleAgent:
             "event_id": str(event.get("event_id", "")).strip(),
             "order": int(event.get("order", 0) or 0),
             "chapter_num": int(event.get("chapter_num", 0) or 0),
-            "chapter_title": str(event.get("chapter_title", "")).strip(),
-            "description": str(event.get("description", "")).strip(),
-            "characters_present": self._clean_string_list(event.get("characters_present")),
-            "location": self._clean_optional_string(event.get("location")),
-            "causes": self._clean_string_list(event.get("causes")),
-            "caused_by": self._clean_string_list(event.get("caused_by")),
-            "time_reference": self._clean_optional_string(event.get("time_reference")),
+            "description": self._trim_text(
+                str(event.get("description", "")).strip(),
+                _MAX_EVENT_DESCRIPTION_CHARS,
+            ),
+            "characters_present": self._clean_string_list(
+                event.get("characters_present"),
+                limit=_MAX_TIMELINE_CHARACTERS,
+            ),
+            "location": self._trim_optional_text(
+                event.get("location"),
+                _MAX_LOCATION_CHARS,
+            ),
+            "causes": self._clean_string_list(event.get("causes"), limit=2),
+            "caused_by": self._clean_string_list(event.get("caused_by"), limit=2),
+            "time_reference": self._trim_optional_text(
+                event.get("time_reference"),
+                _MAX_TIME_REFERENCE_CHARS,
+            ),
             "inferred_date": self._clean_optional_string(event.get("inferred_date")),
             "inferred_year": self._clean_int(event.get("inferred_year")),
-            "relative_time_anchor": self._clean_optional_string(
-                event.get("relative_time_anchor")
+            "relative_time_anchor": self._trim_optional_text(
+                event.get("relative_time_anchor"),
+                _MAX_RELATIVE_TIME_ANCHOR_CHARS,
             ),
             "confidence": self._clean_confidence(event.get("confidence")),
         }
 
     def _build_entity_payload(self, entity: dict[str, Any]) -> dict[str, Any]:
         return {
-            "entity_id": str(entity.get("entity_id", "")).strip(),
-            "name": str(entity.get("name", "")).strip(),
+            "entity_id": self._trim_text(
+                str(entity.get("entity_id", "")).strip(),
+                _MAX_ENTITY_NAME_CHARS,
+            ),
+            "name": self._trim_text(
+                str(entity.get("name", "")).strip(),
+                _MAX_ENTITY_NAME_CHARS,
+            ),
             "entity_type": str(entity.get("entity_type", "")).strip(),
             "appears_in_chapters": sorted(
                 {
@@ -296,8 +401,14 @@ class PlotHoleAgent:
                     for value in entity.get("appears_in_chapters", [])
                     if isinstance(value, int)
                 }
+            )[:_MAX_ENTITY_CHAPTERS],
+            "aliases": self._clean_string_list(
+                [
+                    self._trim_text(value, _MAX_ENTITY_NAME_CHARS)
+                    for value in entity.get("aliases", [])
+                ],
+                limit=_MAX_ENTITY_ALIASES,
             ),
-            "aliases": self._clean_string_list(entity.get("aliases")),
             "role": self._clean_optional_string(entity.get("role")),
         }
 
@@ -338,7 +449,7 @@ class PlotHoleAgent:
                 severity = "medium"
 
             confidence = self._clean_confidence(raw_finding.get("confidence"))
-            if confidence is None or confidence < _DEFAULT_CONFIDENCE_THRESHOLD:
+            if confidence is None or confidence < _plot_hole_confidence_threshold():
                 continue
 
             chapters_involved = sorted(
@@ -396,6 +507,35 @@ class PlotHoleAgent:
             )
         )
         return normalized[: _plot_hole_max_findings()]
+
+    def _model_for_attempt(self, attempt: int) -> str:
+        if attempt <= 1:
+            return _plot_hole_model()
+        fallback_model = _plot_hole_fallback_model().strip()
+        return fallback_model or _plot_hole_model()
+
+    def _retry_delay_seconds(self, exc: Exception, attempt: int) -> float:
+        delay = _plot_hole_retry_base_delay_seconds() * (2 ** (attempt - 1))
+        message = str(exc)
+        match = _RATE_LIMIT_DELAY_PATTERN.search(message)
+        if match is not None:
+            try:
+                parsed_delay = float(match.group(1)) + 0.5
+                return max(delay, parsed_delay)
+            except ValueError:
+                return delay
+        return delay
+
+    def _is_rate_limit_error(self, exc: Exception) -> bool:
+        current: BaseException | None = exc
+        while current is not None:
+            if current.__class__.__name__ == "RateLimitError":
+                return True
+            message = str(current).lower()
+            if "rate limit" in message or "rate_limit_exceeded" in message:
+                return True
+            current = current.__cause__ or current.__context__
+        return False
 
     def _persist_findings(self, findings: list[dict[str, Any]]) -> int:
         deleted = delete_plot_holes(self.job_id)
@@ -531,6 +671,19 @@ class PlotHoleAgent:
             return None
         normalized = str(value).strip()
         return normalized or None
+
+    def _trim_text(self, value: str, max_chars: int) -> str:
+        if len(value) <= max_chars:
+            return value
+        if max_chars <= 3:
+            return value[:max_chars]
+        return value[: max_chars - 3].rstrip() + "..."
+
+    def _trim_optional_text(self, value: Any, max_chars: int) -> str | None:
+        normalized = self._clean_optional_string(value)
+        if normalized is None:
+            return None
+        return self._trim_text(normalized, max_chars)
 
     def _clean_int(self, value: Any) -> int | None:
         try:
