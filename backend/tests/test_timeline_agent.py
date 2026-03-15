@@ -34,6 +34,27 @@ class FakeOpenAIClient:
         self.chat = SimpleNamespace(completions=FakeCompletions(responder))
 
 
+def _make_local_event(
+    source_event_id: str,
+    description: str,
+    chapter_num: int,
+    order: int,
+    *,
+    chapter_title: str | None = None,
+) -> dict[str, object]:
+    return {
+        "source_event_id": source_event_id,
+        "description": description,
+        "chapter_num": chapter_num,
+        "chapter_title": chapter_title or f"Chapter {chapter_num}",
+        "order": order,
+        "characters_present": [],
+        "location": None,
+        "time_reference": None,
+        "confidence": 0.8,
+    }
+
+
 def test_build_llm_input_filters_and_limits_summary_text() -> None:
     agent = TimelineAgent(openai_client=object(), job_id="job-123")
 
@@ -265,6 +286,279 @@ async def test_merge_retries_once_then_succeeds(monkeypatch: pytest.MonkeyPatch)
 
     assert result[0]["event_id"] == "evt_001"
     assert attempts["count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_large_merge_batches_and_final_order(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TIMELINE_MERGE_BATCH_EVENT_LIMIT", "2")
+    agent = TimelineAgent(openai_client=None, job_id="job-123")
+    local_events = [
+        _make_local_event("ch_01_evt_01", "First local", 1, 1),
+        _make_local_event("ch_01_evt_02", "Second local", 1, 2),
+        _make_local_event("ch_02_evt_01", "Third local", 2, 1),
+        _make_local_event("ch_02_evt_02", "Fourth local", 2, 2),
+    ]
+
+    def responder(kwargs: dict[str, object]) -> dict[str, object]:
+        prompt = str(kwargs["messages"][0]["content"])
+        if "Return the globally ordered list of source event ids" in prompt:
+            return {
+                "ordered_source_event_ids": [
+                    "ch_02_evt_01",
+                    "ch_01_evt_01",
+                    "ch_01_evt_02",
+                    "ch_02_evt_02",
+                ]
+            }
+        if '"source_event_id": "ch_01_evt_01"' in prompt:
+            return {
+                "events": [
+                    {
+                        "source_event_id": "ch_01_evt_01",
+                        "description": "Batch one first",
+                        "chapter_num": 1,
+                        "chapter_title": "Chapter 1",
+                        "order": 1,
+                        "characters_present": [],
+                        "location": None,
+                        "causes": ["ch_01_evt_02"],
+                        "caused_by": [],
+                        "time_reference": None,
+                        "inferred_date": None,
+                        "inferred_year": None,
+                        "relative_time_anchor_event_id": None,
+                        "confidence": 0.9,
+                    },
+                    {
+                        "source_event_id": "ch_01_evt_02",
+                        "description": "Batch one second",
+                        "chapter_num": 1,
+                        "chapter_title": "Chapter 1",
+                        "order": 2,
+                        "characters_present": [],
+                        "location": None,
+                        "causes": [],
+                        "caused_by": ["ch_01_evt_01"],
+                        "time_reference": None,
+                        "inferred_date": None,
+                        "inferred_year": None,
+                        "relative_time_anchor_event_id": "ch_01_evt_01",
+                        "confidence": 0.9,
+                    },
+                ]
+            }
+        return {
+            "events": [
+                {
+                    "source_event_id": "ch_02_evt_01",
+                    "description": "Batch two first",
+                    "chapter_num": 2,
+                    "chapter_title": "Chapter 2",
+                    "order": 1,
+                    "characters_present": [],
+                    "location": None,
+                    "causes": [],
+                    "caused_by": [],
+                    "time_reference": None,
+                    "inferred_date": None,
+                    "inferred_year": None,
+                    "relative_time_anchor_event_id": None,
+                    "confidence": 0.9,
+                },
+                {
+                    "source_event_id": "ch_02_evt_02",
+                    "description": "Batch two second",
+                    "chapter_num": 2,
+                    "chapter_title": "Chapter 2",
+                    "order": 2,
+                    "characters_present": [],
+                    "location": None,
+                    "causes": [],
+                    "caused_by": [],
+                    "time_reference": None,
+                    "inferred_date": None,
+                    "inferred_year": None,
+                    "relative_time_anchor_event_id": None,
+                    "confidence": 0.9,
+                },
+            ]
+        }
+
+    agent.openai = FakeOpenAIClient(responder)
+    result = await agent._merge_local_timelines(local_events)
+
+    assert [event["description"] for event in result] == [
+        "Batch two first",
+        "Batch one first",
+        "Batch one second",
+        "Batch two second",
+    ]
+    assert result[1]["causes"] == ["evt_003"]
+    assert result[2]["caused_by"] == ["evt_002"]
+    assert result[2]["relative_time_anchor"] == "after evt_002"
+
+
+@pytest.mark.asyncio
+async def test_batched_merge_timeout_uses_fallback_model_then_local_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TIMELINE_MERGE_BATCH_EVENT_LIMIT", "2")
+    monkeypatch.setenv("TIMELINE_MERGE_FALLBACK_MODEL", "gpt-4o-mini")
+    agent = TimelineAgent(openai_client=None, job_id="job-123")
+    local_events = [
+        _make_local_event("ch_01_evt_01", "First local", 1, 1),
+        _make_local_event("ch_01_evt_02", "Second local", 1, 2),
+        _make_local_event("ch_02_evt_01", "Third local", 2, 1),
+    ]
+    models: list[str] = []
+
+    def responder(kwargs: dict[str, object]) -> dict[str, object]:
+        prompt = str(kwargs["messages"][0]["content"])
+        models.append(str(kwargs["model"]))
+        if "Return the globally ordered list of source event ids" in prompt:
+            return {
+                "ordered_source_event_ids": [
+                    "ch_01_evt_01",
+                    "ch_01_evt_02",
+                    "ch_02_evt_01",
+                ]
+            }
+        if '"source_event_id": "ch_01_evt_01"' in prompt:
+            raise RuntimeError("Request timed out.")
+        return {
+            "events": [
+                {
+                    "source_event_id": "ch_02_evt_01",
+                    "description": "Recovered third",
+                    "chapter_num": 2,
+                    "chapter_title": "Chapter 2",
+                    "order": 1,
+                    "characters_present": [],
+                    "location": None,
+                    "causes": [],
+                    "caused_by": [],
+                    "time_reference": None,
+                    "inferred_date": None,
+                    "inferred_year": None,
+                    "relative_time_anchor_event_id": None,
+                    "confidence": 0.8,
+                }
+            ]
+        }
+
+    agent.openai = FakeOpenAIClient(responder)
+    result = await agent._merge_local_timelines(local_events)
+
+    assert models[:2] == ["gpt-4.1", "gpt-4o-mini"]
+    assert [event["description"] for event in result] == [
+        "First local",
+        "Second local",
+        "Recovered third",
+    ]
+    assert any("batch 1/2" in reason for reason in agent._merge_degraded_reasons)
+
+
+@pytest.mark.asyncio
+async def test_final_order_timeout_degrades_to_chapter_local_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TIMELINE_MERGE_BATCH_EVENT_LIMIT", "2")
+    agent = TimelineAgent(openai_client=None, job_id="job-123")
+    local_events = [
+        _make_local_event("ch_01_evt_01", "First local", 1, 1),
+        _make_local_event("ch_01_evt_02", "Second local", 1, 2),
+        _make_local_event("ch_02_evt_01", "Third local", 2, 1),
+        _make_local_event("ch_02_evt_02", "Fourth local", 2, 2),
+    ]
+
+    def responder(kwargs: dict[str, object]) -> dict[str, object]:
+        prompt = str(kwargs["messages"][0]["content"])
+        if "Return the globally ordered list of source event ids" in prompt:
+            raise RuntimeError("Request timed out.")
+        if '"source_event_id": "ch_01_evt_01"' in prompt:
+            return {
+                "events": [
+                    {
+                        "source_event_id": "ch_01_evt_01",
+                        "description": "First merged",
+                        "chapter_num": 1,
+                        "chapter_title": "Chapter 1",
+                        "order": 2,
+                        "characters_present": [],
+                        "location": None,
+                        "causes": [],
+                        "caused_by": [],
+                        "time_reference": None,
+                        "inferred_date": None,
+                        "inferred_year": None,
+                        "relative_time_anchor_event_id": None,
+                        "confidence": 0.9,
+                    },
+                    {
+                        "source_event_id": "ch_01_evt_02",
+                        "description": "Second merged",
+                        "chapter_num": 1,
+                        "chapter_title": "Chapter 1",
+                        "order": 1,
+                        "characters_present": [],
+                        "location": None,
+                        "causes": [],
+                        "caused_by": [],
+                        "time_reference": None,
+                        "inferred_date": None,
+                        "inferred_year": None,
+                        "relative_time_anchor_event_id": None,
+                        "confidence": 0.9,
+                    },
+                ]
+            }
+        return {
+            "events": [
+                {
+                    "source_event_id": "ch_02_evt_01",
+                    "description": "Third merged",
+                    "chapter_num": 2,
+                    "chapter_title": "Chapter 2",
+                    "order": 2,
+                    "characters_present": [],
+                    "location": None,
+                    "causes": [],
+                    "caused_by": [],
+                    "time_reference": None,
+                    "inferred_date": None,
+                    "inferred_year": None,
+                    "relative_time_anchor_event_id": None,
+                    "confidence": 0.9,
+                },
+                {
+                    "source_event_id": "ch_02_evt_02",
+                    "description": "Fourth merged",
+                    "chapter_num": 2,
+                    "chapter_title": "Chapter 2",
+                    "order": 1,
+                    "characters_present": [],
+                    "location": None,
+                    "causes": [],
+                    "caused_by": [],
+                    "time_reference": None,
+                    "inferred_date": None,
+                    "inferred_year": None,
+                    "relative_time_anchor_event_id": None,
+                    "confidence": 0.9,
+                },
+            ]
+        }
+
+    agent.openai = FakeOpenAIClient(responder)
+    result = await agent._merge_local_timelines(local_events)
+
+    assert [event["description"] for event in result] == [
+        "First merged",
+        "Second merged",
+        "Third merged",
+        "Fourth merged",
+    ]
+    assert any("final compact ordering" in reason for reason in agent._merge_degraded_reasons)
 
 
 @pytest.mark.asyncio

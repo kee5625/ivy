@@ -56,6 +56,10 @@ def _timeline_max_events_per_chapter() -> int:
     return _get_int_env("TIMELINE_MAX_EVENTS_PER_CHAPTER", 4)
 
 
+def _timeline_merge_batch_event_limit() -> int:
+    return _get_int_env("TIMELINE_MERGE_BATCH_EVENT_LIMIT", 24)
+
+
 def _timeline_local_model() -> str:
     return os.getenv("TIMELINE_LOCAL_MODEL", "gpt-4o-mini")
 
@@ -64,12 +68,28 @@ def _timeline_merge_model() -> str:
     return os.getenv("TIMELINE_MERGE_MODEL", "gpt-4.1")
 
 
+def _timeline_merge_fallback_model() -> str:
+    return os.getenv("TIMELINE_MERGE_FALLBACK_MODEL", "gpt-4o-mini")
+
+
 def _timeline_local_timeout_seconds() -> float:
     return _get_float_env("TIMELINE_LOCAL_TIMEOUT_SECONDS", 25.0)
 
 
 def _timeline_merge_timeout_seconds() -> float:
     return _get_float_env("TIMELINE_MERGE_TIMEOUT_SECONDS", 45.0)
+
+
+def _is_timeout_error(exc: Exception) -> bool:
+    timeout_names = {"APITimeoutError", "ReadTimeout", "TimeoutException", "TimeoutError"}
+    current: BaseException | None = exc
+    while current is not None:
+        if current.__class__.__name__ in timeout_names:
+            return True
+        if "timed out" in str(current).lower() or "timeout" in str(current).lower():
+            return True
+        current = current.__cause__ or current.__context__
+    return False
 
 
 class TimelineAgent:
@@ -93,6 +113,7 @@ class TimelineAgent:
         self.openai = openai_client
         self.job_id = job_id
         self._local_semaphore = asyncio.Semaphore(_timeline_chapter_concurrency())
+        self._merge_degraded_reasons: list[str] = []
 
     async def run(self) -> str:
         if self.openai is None:
@@ -134,6 +155,14 @@ class TimelineAgent:
                 current_agent="plot_hole_agent",
                 completed_agents=self._merge_completed_agents("timeline_agent"),
             )
+
+            if self._merge_degraded_reasons:
+                logger.warning(
+                    "[TimelineAgent] job=%s finished in degraded merge mode: %s",
+                    self.job_id,
+                    " | ".join(self._merge_degraded_reasons),
+                )
+
             logger.info(
                 "[TimelineAgent] job=%s finished timeline pipeline in %.2fs; next_agent=plot_hole_agent",
                 self.job_id,
@@ -179,11 +208,13 @@ class TimelineAgent:
             self.job_id,
             len(local_events),
         )
+        self._merge_degraded_reasons = []
         merged_events = await self._merge_local_timelines(local_events)
         logger.info(
-            "[TimelineAgent] job=%s merge pass produced %d merged event(s)",
+            "[TimelineAgent] job=%s merge pass produced %d merged event(s); degraded=%s",
             self.job_id,
             len(merged_events),
+            bool(self._merge_degraded_reasons),
         )
         return merged_events[:_MAX_TIMELINE_EVENTS]
 
@@ -327,75 +358,271 @@ class TimelineAgent:
         self,
         local_events: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
+        ordered_local_events = self._sort_local_events(local_events)
+        batch_limit = _timeline_merge_batch_event_limit()
+
+        if len(ordered_local_events) <= batch_limit:
+            logger.info(
+                "[TimelineAgent] job=%s using single-pass merge path with %d local event(s)",
+                self.job_id,
+                len(ordered_local_events),
+            )
+            prepared_events = await self._merge_batch_events(
+                ordered_local_events,
+                batch_index=1,
+                batch_count=1,
+            )
+            return self._normalize_events(prepared_events)
+
+        batches = self._partition_merge_batches(ordered_local_events, batch_limit)
+        logger.info(
+            "[TimelineAgent] job=%s using batched merge path with %d local event(s) across %d batch(es); batch_limit=%d",
+            self.job_id,
+            len(ordered_local_events),
+            len(batches),
+            batch_limit,
+        )
+
+        merged_batch_events: list[dict[str, Any]] = []
+        for batch_index, batch in enumerate(batches, start=1):
+            merged_batch_events.extend(
+                await self._merge_batch_events(
+                    batch,
+                    batch_index=batch_index,
+                    batch_count=len(batches),
+                )
+            )
+
+        ordered_source_event_ids = await self._request_compact_final_order(merged_batch_events)
+        final_prepared_events = self._apply_ordered_source_ids(
+            merged_batch_events,
+            ordered_source_event_ids,
+        )
+        return self._normalize_events(final_prepared_events)
+
+    async def _merge_batch_events(
+        self,
+        local_events: list[dict[str, Any]],
+        batch_index: int,
+        batch_count: int,
+    ) -> list[dict[str, Any]]:
         payload = self._build_merge_payload(local_events)
         payload_bytes = len(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+        source_event_ids = [event["source_event_id"] for event in local_events]
+        source_event_id_set = set(source_event_ids)
+
         logger.info(
-            "[TimelineAgent] job=%s preparing merge request with %d local event(s), %d payload bytes",
+            "[TimelineAgent] job=%s preparing merge batch %d/%d with %d local event(s), %d payload bytes",
             self.job_id,
+            batch_index,
+            batch_count,
             len(local_events),
             payload_bytes,
         )
 
-        last_exc: Exception | None = None
-        for attempt in range(1, _MERGE_RETRY_ATTEMPTS + 1):
-            try:
-                model_name = _timeline_merge_model()
-                start = time.perf_counter()
-                logger.info(
-                    "[TimelineAgent] job=%s sending merge request to model=%s attempt=%d/%d",
-                    self.job_id,
-                    model_name,
-                    attempt,
-                    _MERGE_RETRY_ATTEMPTS,
-                )
-                prompt = (
-                    "You are a narrative timeline analyst.\n"
-                    "Merge chapter-local events into one globally ordered story timeline.\n\n"
-                    "Requirements:\n"
-                    "1) Every `source_event_id` from the input must appear exactly once in the output.\n"
-                    "2) Produce a single globally ordered list across all chapters.\n"
-                    "3) Preserve narrative causality when setting `causes` and `caused_by`.\n"
-                    "4) Use `source_event_id` values from the input when referencing related events.\n"
-                    "5) `relative_time_anchor_event_id` must be null or one input `source_event_id`.\n"
-                    "6) Keep events concise and do not invent unsupported specifics.\n"
-                    "7) `confidence` must stay between 0.0 and 1.0.\n\n"
-                    f"Input local events:\n{json.dumps(payload, ensure_ascii=False)}"
+        prompt = (
+            "You are a narrative timeline analyst.\n"
+            "Merge this batch of chapter-local events into one ordered story sub-timeline.\n\n"
+            "Requirements:\n"
+            "1) Every `source_event_id` from the input must appear exactly once in the output.\n"
+            "2) Order only the events provided in this batch.\n"
+            "3) Preserve narrative causality when setting `causes` and `caused_by`.\n"
+            "4) Use `source_event_id` values from the input when referencing related events.\n"
+            "5) `relative_time_anchor_event_id` must be null or one input `source_event_id`.\n"
+            "6) Keep events concise and do not invent unsupported specifics.\n"
+            "7) `confidence` must stay between 0.0 and 1.0.\n\n"
+            f"Input local events:\n{json.dumps(payload, ensure_ascii=False)}"
+        )
+
+        try:
+            parsed = await self._request_structured_merge_output(
+                prompt=prompt,
+                response_format=self._merge_response_format(len(local_events)),
+                payload_bytes=payload_bytes,
+                operation_label=f"merge batch {batch_index}/{batch_count}",
+            )
+            raw_events = parsed.get("events", [])
+            if not isinstance(raw_events, list):
+                raise RuntimeError("Merge output invalid: 'events' is not a list")
+
+            prepared = self._prepare_merged_events(raw_events, local_events)
+            logger.info(
+                "[TimelineAgent] job=%s merge batch %d/%d produced %d prepared event(s)",
+                self.job_id,
+                batch_index,
+                batch_count,
+                len(prepared),
+            )
+            return prepared
+        except Exception as exc:
+            reason = (
+                f"batch {batch_index}/{batch_count} fell back to local events after merge failure"
+            )
+            self._record_merge_degraded(reason)
+            logger.warning(
+                "[TimelineAgent] job=%s %s: %r",
+                self.job_id,
+                reason,
+                exc,
+            )
+            fallback_events = self._build_prepared_events_from_local(local_events)
+            if set(event["event_id"] for event in fallback_events) != source_event_id_set:
+                raise RuntimeError("Local fallback failed to preserve source event coverage")
+            return fallback_events
+
+    async def _request_compact_final_order(
+        self,
+        prepared_events: list[dict[str, Any]],
+    ) -> list[str]:
+        payload = self._build_final_order_payload(prepared_events)
+        payload_bytes = len(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+        source_event_id_set = {
+            str(event["event_id"])
+            for event in prepared_events
+            if isinstance(event.get("event_id"), str)
+        }
+
+        prompt = (
+            "You are a narrative chronology analyst.\n"
+            "Return the globally ordered list of source event ids for the provided events.\n\n"
+            "Requirements:\n"
+            "1) Every `source_event_id` must appear exactly once.\n"
+            "2) Preserve the most plausible global chronology across batches.\n"
+            "3) Return only the ordered ids; do not rewrite event content.\n\n"
+            f"Input events:\n{json.dumps(payload, ensure_ascii=False)}"
+        )
+
+        logger.info(
+            "[TimelineAgent] job=%s preparing compact final ordering request with %d event(s), %d payload bytes",
+            self.job_id,
+            len(prepared_events),
+            payload_bytes,
+        )
+
+        try:
+            parsed = await self._request_structured_merge_output(
+                prompt=prompt,
+                response_format=self._final_order_response_format(len(prepared_events)),
+                payload_bytes=payload_bytes,
+                operation_label="final compact ordering",
+            )
+            raw_ids = parsed.get("ordered_source_event_ids", [])
+            if not isinstance(raw_ids, list):
+                raise RuntimeError(
+                    "Final ordering output invalid: 'ordered_source_event_ids' is not a list"
                 )
 
+            ordered_ids = self._validate_ordered_source_event_ids(raw_ids, source_event_id_set)
+            logger.info(
+                "[TimelineAgent] job=%s compact final ordering completed with %d ordered ids",
+                self.job_id,
+                len(ordered_ids),
+            )
+            return ordered_ids
+        except Exception as exc:
+            reason = "final compact ordering fell back to deterministic chapter/local order"
+            self._record_merge_degraded(reason)
+            logger.warning(
+                "[TimelineAgent] job=%s %s: %r",
+                self.job_id,
+                reason,
+                exc,
+            )
+            return self._deterministic_source_event_order(prepared_events)
+
+    async def _request_structured_merge_output(
+        self,
+        *,
+        prompt: str,
+        response_format: dict[str, Any],
+        payload_bytes: int,
+        operation_label: str,
+    ) -> dict[str, Any]:
+        primary_model = _timeline_merge_model()
+        fallback_model = _timeline_merge_fallback_model()
+        timeout_seconds = _timeline_merge_timeout_seconds()
+
+        last_exc: Exception | None = None
+        for attempt in range(1, _MERGE_RETRY_ATTEMPTS + 1):
+            use_fallback_model = bool(
+                last_exc is not None
+                and _is_timeout_error(last_exc)
+                and fallback_model != primary_model
+            )
+            model_name = fallback_model if use_fallback_model else primary_model
+            start = time.perf_counter()
+            logger.info(
+                "[TimelineAgent] job=%s sending %s request to model=%s attempt=%d/%d timeout=%.1fs payload_bytes=%d fallback_model=%s",
+                self.job_id,
+                operation_label,
+                model_name,
+                attempt,
+                _MERGE_RETRY_ATTEMPTS,
+                timeout_seconds,
+                payload_bytes,
+                use_fallback_model,
+            )
+
+            try:
                 response = await self.openai.chat.completions.create(
                     model=model_name,
                     messages=[{"role": "user", "content": prompt}],
-                    response_format=self._merge_response_format(),
-                    timeout=_timeline_merge_timeout_seconds(),
+                    response_format=response_format,
+                    timeout=timeout_seconds,
                 )
                 elapsed = time.perf_counter() - start
                 logger.info(
-                    "[TimelineAgent] job=%s merge request completed in %.2fs",
+                    "[TimelineAgent] job=%s %s request completed in %.2fs",
                     self.job_id,
+                    operation_label,
                     elapsed,
                 )
-
                 raw_content = response.choices[0].message.content
                 parsed = json.loads(raw_content)
-                raw_events = parsed.get("events", [])
-                if not isinstance(raw_events, list):
-                    raise RuntimeError("Merge output invalid: 'events' is not a list")
-
-                source_event_ids = {event["source_event_id"] for event in local_events}
-                return self._normalize_merged_events(raw_events, source_event_ids)
+                if not isinstance(parsed, dict):
+                    raise RuntimeError(f"{operation_label} output invalid: expected object")
+                return parsed
             except Exception as exc:
                 last_exc = exc
                 logger.warning(
-                    "[TimelineAgent] job=%s merge attempt %d/%d failed: %r",
+                    "[TimelineAgent] job=%s %s attempt %d/%d failed: %r",
                     self.job_id,
+                    operation_label,
                     attempt,
                     _MERGE_RETRY_ATTEMPTS,
                     exc,
                 )
 
         raise RuntimeError(
-            f"Timeline merge failed after {_MERGE_RETRY_ATTEMPTS} attempts: {repr(last_exc)}"
+            f"{operation_label} failed after {_MERGE_RETRY_ATTEMPTS} attempts: {repr(last_exc)}"
         ) from last_exc
+
+    def _record_merge_degraded(self, reason: str) -> None:
+        if reason not in self._merge_degraded_reasons:
+            self._merge_degraded_reasons.append(reason)
+
+    def _sort_local_events(
+        self,
+        local_events: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        return sorted(
+            local_events,
+            key=lambda event: (
+                int(event.get("chapter_num", 0)),
+                int(event.get("order", 0)),
+                str(event.get("source_event_id", "")),
+            ),
+        )
+
+    def _partition_merge_batches(
+        self,
+        local_events: list[dict[str, Any]],
+        batch_limit: int,
+    ) -> list[list[dict[str, Any]]]:
+        return [
+            local_events[index : index + batch_limit]
+            for index in range(0, len(local_events), batch_limit)
+        ]
 
     def _build_local_chapter_payload(self, chapter: dict[str, Any]) -> dict[str, Any]:
         summary = chapter.get("summary") or []
@@ -520,13 +747,20 @@ class TimelineAgent:
         )
         return payload
 
-    def _normalize_merged_events(
+    def _prepare_merged_events(
         self,
         raw_events: list[dict[str, Any]],
-        source_event_ids: set[str],
+        local_events: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
+        local_event_map = {
+            str(event["source_event_id"]): event
+            for event in local_events
+            if isinstance(event.get("source_event_id"), str)
+        }
+        source_event_ids = set(local_event_map.keys())
         prepared: list[dict[str, Any]] = []
         seen_source_ids: set[str] = set()
+
         for raw in raw_events:
             source_event_id = raw.get("source_event_id")
             if not isinstance(source_event_id, str) or source_event_id not in source_event_ids:
@@ -535,6 +769,7 @@ class TimelineAgent:
                 continue
             seen_source_ids.add(source_event_id)
 
+            local_event = local_event_map[source_event_id]
             relative_anchor_event_id = raw.get("relative_time_anchor_event_id")
             if (
                 not isinstance(relative_anchor_event_id, str)
@@ -547,12 +782,19 @@ class TimelineAgent:
             prepared.append(
                 {
                     "event_id": source_event_id,
-                    "description": raw.get("description"),
-                    "chapter_num": raw.get("chapter_num"),
-                    "chapter_title": raw.get("chapter_title"),
-                    "order": raw.get("order"),
-                    "characters_present": raw.get("characters_present"),
-                    "location": raw.get("location"),
+                    "description": raw.get("description") or local_event.get("description"),
+                    "chapter_num": raw.get("chapter_num", local_event.get("chapter_num")),
+                    "chapter_title": raw.get(
+                        "chapter_title",
+                        local_event.get("chapter_title"),
+                    ),
+                    "order": raw.get("order", local_event.get("order")),
+                    "local_order": local_event.get("order"),
+                    "characters_present": raw.get(
+                        "characters_present",
+                        local_event.get("characters_present"),
+                    ),
+                    "location": raw.get("location", local_event.get("location")),
                     "causes": [
                         value
                         for value in raw.get("causes", [])
@@ -563,11 +805,14 @@ class TimelineAgent:
                         for value in raw.get("caused_by", [])
                         if isinstance(value, str) and value in source_event_ids
                     ],
-                    "time_reference": raw.get("time_reference"),
+                    "time_reference": raw.get(
+                        "time_reference",
+                        local_event.get("time_reference"),
+                    ),
                     "inferred_date": raw.get("inferred_date"),
                     "inferred_year": raw.get("inferred_year"),
                     "relative_time_anchor": relative_anchor,
-                    "confidence": raw.get("confidence"),
+                    "confidence": raw.get("confidence", local_event.get("confidence")),
                 }
             )
 
@@ -578,14 +823,115 @@ class TimelineAgent:
                 + ", ".join(sorted(missing_source_ids))
             )
 
-        normalized = self._normalize_events(prepared)
-        logger.info(
-            "[TimelineAgent] job=%s normalized %d merged timeline event(s) from %d raw merge event(s)",
-            self.job_id,
-            len(normalized),
-            len(raw_events),
+        return prepared
+
+    def _build_prepared_events_from_local(
+        self,
+        local_events: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        return [
+            {
+                "event_id": event["source_event_id"],
+                "description": event.get("description"),
+                "chapter_num": event.get("chapter_num"),
+                "chapter_title": event.get("chapter_title"),
+                "order": event.get("order"),
+                "local_order": event.get("order"),
+                "characters_present": event.get("characters_present", []),
+                "location": event.get("location"),
+                "causes": [],
+                "caused_by": [],
+                "time_reference": event.get("time_reference"),
+                "inferred_date": None,
+                "inferred_year": None,
+                "relative_time_anchor": None,
+                "confidence": event.get("confidence"),
+            }
+            for event in local_events
+        ]
+
+    def _build_final_order_payload(
+        self,
+        prepared_events: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        return [
+            {
+                "source_event_id": event["event_id"],
+                "description": event.get("description"),
+                "chapter_num": event.get("chapter_num"),
+                "chapter_title": event.get("chapter_title"),
+                "local_order": event.get("local_order"),
+                "time_reference": event.get("time_reference"),
+                "causes": event.get("causes", []),
+                "caused_by": event.get("caused_by", []),
+                "relative_time_anchor": event.get("relative_time_anchor"),
+            }
+            for event in prepared_events
+        ]
+
+    def _validate_ordered_source_event_ids(
+        self,
+        raw_ids: list[Any],
+        source_event_ids: set[str],
+    ) -> list[str]:
+        ordered_ids: list[str] = []
+        seen_ids: set[str] = set()
+        for value in raw_ids:
+            if not isinstance(value, str) or value not in source_event_ids:
+                continue
+            if value in seen_ids:
+                continue
+            seen_ids.add(value)
+            ordered_ids.append(value)
+
+        missing_source_ids = source_event_ids - seen_ids
+        if missing_source_ids:
+            raise RuntimeError(
+                "Final ordering omitted source events: "
+                + ", ".join(sorted(missing_source_ids))
+            )
+        return ordered_ids
+
+    def _deterministic_source_event_order(
+        self,
+        prepared_events: list[dict[str, Any]],
+    ) -> list[str]:
+        ordered = sorted(
+            prepared_events,
+            key=lambda event: (
+                int(event.get("chapter_num", 0)),
+                int(event.get("local_order", event.get("order", 0)) or 0),
+                str(event.get("event_id", "")),
+            ),
         )
-        return normalized
+        return [str(event["event_id"]) for event in ordered]
+
+    def _apply_ordered_source_ids(
+        self,
+        prepared_events: list[dict[str, Any]],
+        ordered_source_event_ids: list[str],
+    ) -> list[dict[str, Any]]:
+        event_lookup = {
+            str(event["event_id"]): dict(event)
+            for event in prepared_events
+            if isinstance(event.get("event_id"), str)
+        }
+
+        missing_source_ids = set(event_lookup.keys()) - set(ordered_source_event_ids)
+        if missing_source_ids:
+            raise RuntimeError(
+                "Ordered source ids omitted prepared events: "
+                + ", ".join(sorted(missing_source_ids))
+            )
+
+        final_events: list[dict[str, Any]] = []
+        for order, source_event_id in enumerate(ordered_source_event_ids, start=1):
+            event = event_lookup.get(source_event_id)
+            if event is None:
+                continue
+            event["order"] = order
+            final_events.append(event)
+        return final_events
 
     def _normalize_events(self, events: list[dict[str, Any]]) -> list[dict[str, Any]]:
         normalized: list[dict[str, Any]] = []
@@ -820,7 +1166,6 @@ class TimelineAgent:
         except Exception:
             existing = set()
 
-        # ingestion is always required before timeline in current pipeline
         baseline = {"ingestion_agent"}
         if new_agent:
             baseline.add(new_agent)
@@ -875,7 +1220,7 @@ class TimelineAgent:
             },
         }
 
-    def _merge_response_format(self) -> dict[str, Any]:
+    def _merge_response_format(self, max_events: int) -> dict[str, Any]:
         return {
             "type": "json_schema",
             "json_schema": {
@@ -887,6 +1232,7 @@ class TimelineAgent:
                     "properties": {
                         "events": {
                             "type": "array",
+                            "maxItems": max_events,
                             "items": {
                                 "type": "object",
                                 "additionalProperties": False,
@@ -947,6 +1293,27 @@ class TimelineAgent:
                         }
                     },
                     "required": ["events"],
+                },
+            },
+        }
+
+    def _final_order_response_format(self, max_events: int) -> dict[str, Any]:
+        return {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "story_timeline_order",
+                "strict": True,
+                "schema": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "ordered_source_event_ids": {
+                            "type": "array",
+                            "maxItems": max_events,
+                            "items": {"type": "string"},
+                        }
+                    },
+                    "required": ["ordered_source_event_ids"],
                 },
             },
         }
