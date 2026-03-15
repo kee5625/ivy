@@ -5,6 +5,7 @@ import logging
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Request, UploadFile
 
 from agents.ingestion_agent import IngestionAgent
+from agents.plot_hole_agent import PlotHoleAgent
 from agents.timeline_agent import TimelineAgent
 from integrations.azure.blob_repository import upload_pdf_bytes
 from integrations.cosmos.cosmos_repository import create_job
@@ -29,6 +30,11 @@ async def _run_ingestion(openai_client, job_id: str, blob_name: str) -> None:
         logger.info("[pipeline] job=%s invoking timeline agent", job_id)
         await timeline_agent.run()
         logger.info("[pipeline] job=%s timeline agent complete", job_id)
+
+        plot_hole_agent = PlotHoleAgent(openai_client=openai_client, job_id=job_id)
+        logger.info("[pipeline] job=%s invoking plot-hole agent", job_id)
+        await plot_hole_agent.run()
+        logger.info("[pipeline] job=%s plot-hole agent complete", job_id)
     except Exception:
         import traceback, sys
         traceback.print_exc(file=sys.stderr)

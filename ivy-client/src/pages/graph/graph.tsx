@@ -22,12 +22,20 @@ const ACTIVE_COPY: Record<string, { title: string; body: string }> = {
     body: "The backend is ordering events across the full story and preserving causal links between them.",
   },
   timeline_complete: {
-    title: "Timeline results are ready",
-    body: "The merge-ready timeline feature has finished. You can open the new results page to inspect chapters, timeline events, and the placeholder issues tab.",
+    title: "Timeline locked in",
+    body: "Chronology is complete. Ivy is now reviewing the finished story state for concrete plot holes before publishing the final results.",
+  },
+  plot_hole_in_progress: {
+    title: "Scanning for continuity issues",
+    body: "The final pass is looking for high-signal contradictions like timeline paradoxes, location conflicts, dead-character contradictions, and unresolved setups.",
+  },
+  plot_hole_complete: {
+    title: "Results are ready",
+    body: "The full pipeline has finished. You can open the results page to inspect chapters, the merged timeline, and real issues from the plot-hole pass.",
   },
   failed: {
     title: "Pipeline stopped",
-    body: "The job failed before timeline completion. Review the error details below before retrying.",
+    body: "The job failed before the full review finished. Review the error details below before retrying.",
   },
 };
 
@@ -96,7 +104,7 @@ export default function JobDetailsPage() {
                 <div className="rounded-2xl border border-[#d7e8d2] bg-[#f5fbf2] px-4 py-3 text-sm text-[#45624d]">
                   <p className="font-semibold text-[#274232]">Results page</p>
                   <p className="mt-1 leading-6">
-                    The dedicated results view stays separate from this monitor and becomes useful as soon as the timeline completes.
+                    The dedicated results view stays separate from this monitor and unlocks once the full pipeline, including issue analysis, completes.
                   </p>
                 </div>
               </div>
@@ -110,9 +118,9 @@ export default function JobDetailsPage() {
 
               {!canSeeResults && job?.status !== "failed" && (
                 <div className="mt-6 rounded-2xl border border-[#d8ead2] bg-[#f7fbf5] px-5 py-4 text-sm text-[#587160]">
-                  <p className="font-semibold text-[#294635]">Results unlock after timeline completion</p>
+                  <p className="font-semibold text-[#294635]">Results unlock after the issue scan finishes</p>
                   <p className="mt-1">
-                    This page is intentionally focused on live pipeline status. Once the timeline finishes, the button above will take you to the tabbed results page.
+                    This page is intentionally focused on live pipeline status. Once the final plot-hole pass finishes, the button above will take you to the tabbed results page.
                   </p>
                 </div>
               )}
@@ -125,10 +133,10 @@ export default function JobDetailsPage() {
                     What ships in this branch
                   </p>
                   <h2 className="mt-3 text-xl font-bold text-[#234231]">
-                    Timeline first, issues later
+                    Full review pipeline
                   </h2>
                   <p className="mt-3 text-sm leading-7 text-[#587160]">
-                    This merge pass makes the ingestion and timeline pipeline reliable, visible, and reviewable. The final plot-hole stage remains represented in the UI so the user journey already matches the fuller roadmap.
+                    This branch runs ingestion, timeline synthesis, and a final issue-analysis pass end to end so the user journey and stored results stay in sync.
                   </p>
                 </div>
 
@@ -138,15 +146,15 @@ export default function JobDetailsPage() {
                       Now
                     </p>
                     <p className="mt-2 text-sm text-[#355342]">
-                      Ingestion and timeline run end to end, and results are readable from a dedicated page.
+                      Ingestion, timeline synthesis, and plot-hole analysis run end to end, and results are readable from a dedicated page.
                     </p>
                   </div>
                   <div className="rounded-2xl border border-[#d6e8d0] bg-white px-4 py-4">
                     <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#6e9576]">
-                      Next
+                      Issues tab
                     </p>
                     <p className="mt-2 text-sm text-[#355342]">
-                      Plot-hole analysis will plug into the same pipeline and populate the Issues tab once merged.
+                      The Issues tab now fills from persisted plot-hole findings instead of a placeholder state.
                     </p>
                   </div>
                 </div>

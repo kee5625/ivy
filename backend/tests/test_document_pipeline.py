@@ -27,12 +27,26 @@ async def test_run_ingestion_executes_agents_in_order(monkeypatch: pytest.Monkey
             calls.append(("timeline", None))
             return "job-1"
 
+    class FakePlotHoleAgent:
+        def __init__(self, openai_client, job_id: str):
+            assert openai_client == "client"
+            assert job_id == "job-1"
+
+        async def run(self) -> str:
+            calls.append(("plot_hole", None))
+            return "job-1"
+
     monkeypatch.setattr("api.routes.document.IngestionAgent", FakeIngestionAgent)
     monkeypatch.setattr("api.routes.document.TimelineAgent", FakeTimelineAgent)
+    monkeypatch.setattr("api.routes.document.PlotHoleAgent", FakePlotHoleAgent)
 
     await _run_ingestion("client", "job-1", "story.pdf")
 
-    assert calls == [("ingestion", "story.pdf"), ("timeline", None)]
+    assert calls == [
+        ("ingestion", "story.pdf"),
+        ("timeline", None),
+        ("plot_hole", None),
+    ]
 
 
 @pytest.mark.asyncio
@@ -61,4 +75,41 @@ async def test_run_ingestion_stops_after_ingestion_failure(monkeypatch: pytest.M
     await _run_ingestion("client", "job-1", "story.pdf")
 
     assert calls == [("ingestion", "story.pdf")]
+
+
+@pytest.mark.asyncio
+async def test_run_ingestion_stops_after_timeline_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, str | None]] = []
+
+    class FakeIngestionAgent:
+        def __init__(self, openai_client, job_id: str):
+            pass
+
+        async def run(self, blob_name: str) -> str:
+            calls.append(("ingestion", blob_name))
+            return "job-1"
+
+    class FakeTimelineAgent:
+        def __init__(self, openai_client, job_id: str):
+            pass
+
+        async def run(self) -> str:
+            calls.append(("timeline", None))
+            raise RuntimeError("timeline boom")
+
+    class FakePlotHoleAgent:
+        def __init__(self, openai_client, job_id: str):
+            pass
+
+        async def run(self) -> str:
+            calls.append(("plot_hole", None))
+            return "job-1"
+
+    monkeypatch.setattr("api.routes.document.IngestionAgent", FakeIngestionAgent)
+    monkeypatch.setattr("api.routes.document.TimelineAgent", FakeTimelineAgent)
+    monkeypatch.setattr("api.routes.document.PlotHoleAgent", FakePlotHoleAgent)
+
+    await _run_ingestion("client", "job-1", "story.pdf")
+
+    assert calls == [("ingestion", "story.pdf"), ("timeline", None)]
 

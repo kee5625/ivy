@@ -10,9 +10,13 @@ def test_get_job_status_returns_current_status(monkeypatch) -> None:
         "integrations.cosmos.cosmos_repository.get_job",
         lambda job_id: {
             "job_id": job_id,
-            "status": "timeline_complete",
-            "current_agent": "plot_hole_agent",
-            "completed_agents": ["ingestion_agent", "timeline_agent"],
+            "status": "plot_hole_complete",
+            "current_agent": None,
+            "completed_agents": [
+                "ingestion_agent",
+                "timeline_agent",
+                "plot_hole_agent",
+            ],
             "error": None,
             "created_at": "2026-03-16T00:00:00+00:00",
             "updated_at": "2026-03-16T00:05:00+00:00",
@@ -23,7 +27,7 @@ def test_get_job_status_returns_current_status(monkeypatch) -> None:
         response = client.get("/jobs/job-123")
 
     assert response.status_code == 200
-    assert response.json()["status"] == "timeline_complete"
+    assert response.json()["status"] == "plot_hole_complete"
 
 
 def test_get_chapters_keeps_existing_client_shape(monkeypatch) -> None:
@@ -95,5 +99,42 @@ def test_get_plot_holes_returns_empty_list_when_none_exist(monkeypatch) -> None:
         "job_id": "job-123",
         "plot_hole_count": 0,
         "plot_holes": [],
+    }
+
+
+def test_get_plot_holes_returns_stored_findings(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "integrations.cosmos.cosmos_repository.get_plot_holes",
+        lambda job_id: [
+            {
+                "hole_id": "hole_001",
+                "hole_type": "location_conflict",
+                "severity": "high",
+                "description": "Jon is placed in the archive and the harbor during the same morning scene.",
+                "chapters_involved": [4, 5],
+                "characters_involved": ["Jon"],
+                "events_involved": ["evt_011", "evt_012"],
+            }
+        ],
+    )
+
+    with TestClient(create_app()) as client:
+        response = client.get("/jobs/job-123/plot-holes")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "job_id": "job-123",
+        "plot_hole_count": 1,
+        "plot_holes": [
+            {
+                "hole_id": "hole_001",
+                "hole_type": "location_conflict",
+                "severity": "high",
+                "description": "Jon is placed in the archive and the harbor during the same morning scene.",
+                "chapters_involved": [4, 5],
+                "characters_involved": ["Jon"],
+                "events_involved": ["evt_011", "evt_012"],
+            }
+        ],
     }
 

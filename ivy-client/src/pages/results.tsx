@@ -12,7 +12,7 @@ function IssuesList({ plotHoles }: { plotHoles: PlotHole[] }) {
   if (plotHoles.length === 0) {
     return (
       <div className="rounded-3xl border border-dashed border-[#caded1] bg-[#f7fbf5] px-6 py-10 text-sm text-[#5a7a62]">
-        The Issues tab is wired and ready, but the plot-hole pipeline has not been implemented on this branch yet.
+        No high-signal plot holes were detected in the current analysis pass.
       </div>
     );
   }
@@ -35,6 +35,36 @@ function IssuesList({ plotHoles }: { plotHoles: PlotHole[] }) {
           <p className="mt-3 text-sm leading-7 text-[#355342]">
             {plotHole.description}
           </p>
+          {(plotHole.chapters_involved.length > 0 ||
+            plotHole.characters_involved.length > 0 ||
+            plotHole.events_involved.length > 0) && (
+            <div className="mt-4 flex flex-wrap gap-2 text-xs text-[#587160]">
+              {plotHole.chapters_involved.map((chapterNum) => (
+                <span
+                  key={`${plotHole.hole_id}-chapter-${chapterNum}`}
+                  className="rounded-full border border-[#d4e8ce] bg-[#f8fcf7] px-2.5 py-1"
+                >
+                  Chapter {chapterNum}
+                </span>
+              ))}
+              {plotHole.characters_involved.map((character) => (
+                <span
+                  key={`${plotHole.hole_id}-character-${character}`}
+                  className="rounded-full border border-[#d4e8ce] bg-[#f8fcf7] px-2.5 py-1"
+                >
+                  {character}
+                </span>
+              ))}
+              {plotHole.events_involved.map((eventId) => (
+                <span
+                  key={`${plotHole.hole_id}-event-${eventId}`}
+                  className="rounded-full border border-[#d4e8ce] bg-[#f8fcf7] px-2.5 py-1 font-mono"
+                >
+                  {eventId}
+                </span>
+              ))}
+            </div>
+          )}
         </article>
       ))}
     </div>
