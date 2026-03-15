@@ -35,6 +35,7 @@ class ChapterDocument(TypedDict):
     summary: list[str]
     key_events: list[str]
     characters: list[str]
+    temporal_markers: list[str]
     raw_text: str
 
 
@@ -58,12 +59,17 @@ class TimelineEventDocument(TypedDict):
     event_id: str                # e.g. "evt_001"
     description: str
     chapter_num: int
+    chapter_title: str
     order: int                   # global chronological order across all chapters
     characters_present: list[str]  # entity_ids
     location: str | None         # entity_id of location
     causes: list[str]            # event_ids this event directly causes
     caused_by: list[str]         # event_ids that caused this event
     time_reference: str | None   # e.g. "three days later", "that evening"
+    inferred_date: str | None    # e.g. "1998-06-12" when confidently inferable
+    inferred_year: int | None
+    relative_time_anchor: str | None  # e.g. "after evt_003"
+    confidence: float | None
 
 
 class PlotHoleDocument(TypedDict):
@@ -155,6 +161,7 @@ def upsert_chapter(
     key_events: list[str],
     characters: list[str],
     raw_text: str,
+    temporal_markers: list[str] | None = None,
 ) -> None:
     """Write a single chapter's extracted data. Called as each chapter finishes."""
     container = _get_container()
@@ -167,6 +174,7 @@ def upsert_chapter(
         "summary": summary,
         "key_events": key_events,
         "characters": characters,
+        "temporal_markers": temporal_markers or [],
         "raw_text": raw_text,
     })
 
@@ -272,6 +280,11 @@ def upsert_timeline_event(
     caused_by: list[str] | None = None,
     location: str | None = None,
     time_reference: str | None = None,
+    chapter_title: str | None = None,
+    inferred_date: str | None = None,
+    inferred_year: int | None = None,
+    relative_time_anchor: str | None = None,
+    confidence: float | None = None,
 ) -> None:
     """Write a single timeline event found by the timeline agent."""
     container = _get_container()
@@ -282,12 +295,17 @@ def upsert_timeline_event(
         "event_id": event_id,
         "description": description,
         "chapter_num": chapter_num,
+        "chapter_title": chapter_title or "",
         "order": order,
         "characters_present": characters_present,
         "location": location,
         "causes": causes or [],
         "caused_by": caused_by or [],
         "time_reference": time_reference,
+        "inferred_date": inferred_date,
+        "inferred_year": inferred_year,
+        "relative_time_anchor": relative_time_anchor,
+        "confidence": confidence,
     })
 
 
@@ -297,7 +315,7 @@ def get_timeline_events(job_id: str) -> list[TimelineEventDocument]:
     query = (
         "SELECT * FROM c "
         "WHERE c.job_id = @job_id AND c.type = 'timeline_event' "
-        "ORDER BY c.order"
+        "ORDER BY c[\"order\"]"
     )
     items = container.query_items(
         query=query,
@@ -316,7 +334,7 @@ def get_timeline_events_for_chapter(
     query = (
         "SELECT * FROM c "
         "WHERE c.job_id = @job_id AND c.type = 'timeline_event' AND c.chapter_num = @chapter_num "
-        "ORDER BY c.order"
+        "ORDER BY c[\"order\"]"
     )
     items = container.query_items(
         query=query,

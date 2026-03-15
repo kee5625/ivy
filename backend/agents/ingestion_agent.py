@@ -10,6 +10,11 @@ from integrations.cosmos.cosmos_repository import (
     update_job_status,
     upsert_chapter,
 )
+from pipeline_status import (
+    STATUS_FAILED,
+    STATUS_INGESTION_COMPLETE,
+    STATUS_INGESTION_IN_PROGRESS,
+)
 from services.parse_service import parse_and_clean
 
 logger = logging.getLogger(__name__)
@@ -45,7 +50,7 @@ class IngestionAgent:
             )
         update_job_status(
             self.job_id,
-            status="in_progress",
+            status=STATUS_INGESTION_IN_PROGRESS,
             current_agent="ingestion_agent",
         )
 
@@ -60,15 +65,15 @@ class IngestionAgent:
             await self._extract_all_chapters(chapters)
             update_job_status(
                 self.job_id,
-                status="ingestion_complete",
-                current_agent="entity_agent",
+                status=STATUS_INGESTION_COMPLETE,
+                current_agent="timeline_agent",
                 completed_agents=["ingestion_agent"],
             )
         except Exception as e:
             logger.exception(
                 "[IngestionAgent] job=%s  ingestion failed", self.job_id
             )
-            update_job_status(self.job_id, status="failed", error=str(e))
+            update_job_status(self.job_id, status=STATUS_FAILED, error=str(e))
             raise
 
         return self.job_id
@@ -143,6 +148,7 @@ class IngestionAgent:
             key_events=result["key_events"],
             characters=result["characters"],
             raw_text=result["raw_text"],
+            temporal_markers=result["temporal_markers"],
         )
         logger.info(
             "[IngestionAgent] job=%s  chapter=%d '%s' saved",
@@ -186,12 +192,14 @@ class IngestionAgent:
             "You are a literary analyst. Given the following chapter text, extract:\n"
             "1. A strict maximum of 3 short bullets for the summary.\n"
             "2. A strict maximum of 5 key events (each as a short sentence).\n"
-            "3. Only the top 10 most important characters mentioned (names only).\n\n"
+            "3. Only the top 10 most important characters mentioned (names only).\n"
+            "4. Up to 5 temporal markers (explicit or relative time expressions like years, dates, 'later that night', 'the next morning').\n\n"
             "Respond in JSON with exactly this shape:\n"
             "{\n"
             '  "summary": ["bullet 1", "bullet 2"],\n'
             '  "key_events": ["event 1", "event 2"],\n'
-            '  "characters": ["Name1", "Name2"]\n'
+            '  "characters": ["Name1", "Name2"],\n'
+            '  "temporal_markers": ["1998", "the next day"]\n'
             "}\n\n"
             f"Chapter: {chunk['chapter_title']}\n\n"
             f"Text:\n{chapter_text}"
@@ -213,5 +221,6 @@ class IngestionAgent:
             "summary": extracted.get("summary", []),
             "key_events": extracted.get("key_events", []),
             "characters": extracted.get("characters", []),
+            "temporal_markers": extracted.get("temporal_markers", []),
             "raw_text": chunk["text"],
         }

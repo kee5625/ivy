@@ -6,7 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from services.parse_service import parse_and_clean
 
 
-def test_local_pdf():
+def run_local_pdf_smoke_test() -> None:
     # Path to your test PDF
     pdf_path = Path('../../tests/harrytest2.pdf')
 
@@ -70,4 +70,4 @@ def test_local_pdf():
 
 
 if __name__ == "__main__":
-    test_local_pdf()
+    run_local_pdf_smoke_test()

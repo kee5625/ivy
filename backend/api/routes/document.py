@@ -5,6 +5,7 @@ import logging
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Request, UploadFile
 
 from agents.ingestion_agent import IngestionAgent
+from agents.timeline_agent import TimelineAgent
 from integrations.azure.blob_repository import upload_pdf_bytes
 from integrations.cosmos.cosmos_repository import create_job
 
@@ -14,8 +15,20 @@ router = APIRouter(tags=["documents"])
 
 async def _run_ingestion(openai_client, job_id: str, blob_name: str) -> None:
     try:
-        agent = IngestionAgent(openai_client=openai_client, job_id=job_id)
-        await agent.run(blob_name)
+        logger.info(
+            "[pipeline] job=%s starting background pipeline for blob=%s",
+            job_id,
+            blob_name,
+        )
+        ingestion_agent = IngestionAgent(openai_client=openai_client, job_id=job_id)
+        logger.info("[pipeline] job=%s invoking ingestion agent", job_id)
+        await ingestion_agent.run(blob_name)
+        logger.info("[pipeline] job=%s ingestion agent complete", job_id)
+
+        timeline_agent = TimelineAgent(openai_client=openai_client, job_id=job_id)
+        logger.info("[pipeline] job=%s invoking timeline agent", job_id)
+        await timeline_agent.run()
+        logger.info("[pipeline] job=%s timeline agent complete", job_id)
     except Exception:
         import traceback, sys
         traceback.print_exc(file=sys.stderr)
@@ -56,7 +69,12 @@ async def upload_pdf(
     # 3. Fire ingestion agent in the background -- route returns immediately
     openai_client = request.app.state.openai_client
     background_tasks.add_task(_run_ingestion, openai_client, job_id, uploaded["blob_name"])
-    logger.info("Ingestion agent queued for job: %s", job_id)
+    logger.info(
+        "Pipeline queued for job=%s (blob=%s, openai_configured=%s)",
+        job_id,
+        uploaded["blob_name"],
+        openai_client is not None,
+    )
 
     return {
         "status": "accepted",
@@ -107,5 +125,67 @@ async def get_job_chapters(job_id: str) -> dict[str, object]:
                 "characters": ch["characters"],
             }
             for ch in chapters
+        ],
+    }
+
+
+@router.get("/jobs/{job_id}/timeline")
+async def get_job_timeline(job_id: str) -> dict[str, object]:
+    from integrations.cosmos.cosmos_repository import get_timeline_events
+    try:
+        timeline_events = get_timeline_events(job_id)
+    except Exception as exc:
+        logger.exception("Failed to fetch timeline for job %s", job_id)
+        raise HTTPException(status_code=500, detail="Failed to fetch timeline events") from exc
+
+    return {
+        "job_id": job_id,
+        "timeline_event_count": len(timeline_events),
+        "timeline_events": [
+            {
+                "event_id": evt["event_id"],
+                "description": evt["description"],
+                "chapter_num": evt["chapter_num"],
+                "chapter_title": evt.get("chapter_title", ""),
+                "order": evt["order"],
+                "characters_present": evt.get("characters_present", []),
+                "location": evt.get("location"),
+                "causes": evt.get("causes", []),
+                "caused_by": evt.get("caused_by", []),
+                "time_reference": evt.get("time_reference"),
+                "inferred_date": evt.get("inferred_date"),
+                "inferred_year": evt.get("inferred_year"),
+                "relative_time_anchor": evt.get("relative_time_anchor"),
+                "confidence": evt.get("confidence"),
+            }
+            for evt in timeline_events
+        ],
+    }
+
+
+@router.get("/jobs/{job_id}/plot-holes")
+async def get_job_plot_holes(job_id: str) -> dict[str, object]:
+    from integrations.cosmos.cosmos_repository import get_plot_holes
+
+    try:
+        plot_holes = get_plot_holes(job_id)
+    except Exception as exc:
+        logger.exception("Failed to fetch plot holes for job %s", job_id)
+        raise HTTPException(status_code=500, detail="Failed to fetch plot holes") from exc
+
+    return {
+        "job_id": job_id,
+        "plot_hole_count": len(plot_holes),
+        "plot_holes": [
+            {
+                "hole_id": hole["hole_id"],
+                "hole_type": hole["hole_type"],
+                "severity": hole["severity"],
+                "description": hole["description"],
+                "chapters_involved": hole.get("chapters_involved", []),
+                "characters_involved": hole.get("characters_involved", []),
+                "events_involved": hole.get("events_involved", []),
+            }
+            for hole in plot_holes
         ],
     }

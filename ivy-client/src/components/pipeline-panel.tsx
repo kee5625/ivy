@@ -1,11 +1,13 @@
 import React from "react";
-import type { Job } from "@/types/graph";
-import { PIPELINE_STEPS } from "@/types/graph";
+
+import { PIPELINE_STEPS, type Job } from "@/types/graph";
 
 type PipelinePanelProps = {
   job: Job | null;
   isLoading: boolean;
 };
+
+type StepState = "completed" | "active" | "pending" | "unavailable";
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString(undefined, {
@@ -16,27 +18,25 @@ function formatDate(iso: string): string {
   });
 }
 
-type StepState = "completed" | "active" | "pending" | "unavailable";
-
 function getStepState(
   stepId: string,
   job: Job | null,
   stepAvailable: boolean,
 ): StepState {
-  if (!stepAvailable) return "unavailable";
-  if (!job) return "pending";
+  if (!stepAvailable) {
+    return "unavailable";
+  }
 
-  if (job.completed_agents.includes(stepId)) return "completed";
+  if (!job) {
+    return "pending";
+  }
 
-  if (
-    job.current_agent === stepId &&
-    (job.status === "in_progress" || job.status === "pending")
-  )
-    return "active";
-
-  if (job.status === "ingestion_complete") {
-    // All available steps are done
+  if (job.completed_agents.includes(stepId)) {
     return "completed";
+  }
+
+  if (job.current_agent === stepId && job.status !== "failed") {
+    return "active";
   }
 
   return "pending";
@@ -112,16 +112,20 @@ export const PipelinePanel: React.FC<PipelinePanelProps> = ({
   isLoading,
 }) => {
   const statusLabel: Record<string, string> = {
-    pending: "Pending",
-    in_progress: "In Progress",
-    ingestion_complete: "Chapters Extracted",
+    pending: "Queued",
+    ingestion_in_progress: "Ingestion in progress",
+    ingestion_complete: "Ingestion complete",
+    timeline_in_progress: "Timeline in progress",
+    timeline_complete: "Timeline ready",
     failed: "Failed",
   };
 
   const statusDot: Record<string, string> = {
     pending: "bg-amber-400",
-    in_progress: "bg-[#4f8957] animate-pulse",
-    ingestion_complete: "bg-[#4f8957]",
+    ingestion_in_progress: "bg-[#4f8957] animate-pulse",
+    ingestion_complete: "bg-[#9dc69f]",
+    timeline_in_progress: "bg-[#4f8957] animate-pulse",
+    timeline_complete: "bg-[#4f8957]",
     failed: "bg-red-500",
   };
 
@@ -129,26 +133,24 @@ export const PipelinePanel: React.FC<PipelinePanelProps> = ({
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Status badge */}
       <div className="flex items-center gap-2.5">
         <span
-          className={`h-2.5 w-2.5 rounded-full shrink-0 ${
+          className={`h-2.5 w-2.5 shrink-0 rounded-full ${
             statusDot[currentStatus] ?? "bg-gray-400"
           }`}
         />
         <span className="text-sm font-semibold text-[#2b4a37]">
           {isLoading && !job
-            ? "Loading…"
+            ? "Loading..."
             : (statusLabel[currentStatus] ?? currentStatus)}
         </span>
         {job?.status === "failed" && job.error && (
-          <span className="ml-1 text-xs text-red-600 truncate">
-            — {job.error}
+          <span className="ml-1 truncate text-xs text-red-600">
+            - {job.error}
           </span>
         )}
       </div>
 
-      {/* Stepper */}
       <div className="relative flex flex-col gap-0">
         {PIPELINE_STEPS.map((step, index) => {
           const state = getStepState(step.id, job, step.available);
@@ -156,12 +158,10 @@ export const PipelinePanel: React.FC<PipelinePanelProps> = ({
 
           return (
             <div key={step.id} className="flex items-stretch gap-4">
-              {/* Track column */}
-              <div className="flex flex-col items-center w-8 shrink-0">
-                {/* Icon circle */}
+              <div className="flex w-8 shrink-0 flex-col items-center">
                 <div
                   className={`
-                    z-10 flex items-center justify-center h-8 w-8 rounded-full border-2 shrink-0
+                    z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2
                     transition-colors duration-300
                     ${
                       state === "completed"
@@ -186,10 +186,9 @@ export const PipelinePanel: React.FC<PipelinePanelProps> = ({
                   )}
                 </div>
 
-                {/* Connector line */}
                 {!isLast && (
                   <div
-                    className={`flex-1 w-px my-1 transition-colors duration-500 ${
+                    className={`my-1 w-px flex-1 transition-colors duration-500 ${
                       state === "completed" ? "bg-[#4f8957]" : "bg-[#d4e8ce]"
                     }`}
                     style={{ minHeight: "20px" }}
@@ -197,8 +196,7 @@ export const PipelinePanel: React.FC<PipelinePanelProps> = ({
                 )}
               </div>
 
-              {/* Text content */}
-              <div className={`pb-5 min-w-0 ${isLast ? "pb-0" : ""}`}>
+              <div className={`min-w-0 ${isLast ? "pb-0" : "pb-5"}`}>
                 <p
                   className={`text-sm font-semibold leading-tight transition-colors duration-300 ${
                     state === "completed" || state === "active"
@@ -208,7 +206,7 @@ export const PipelinePanel: React.FC<PipelinePanelProps> = ({
                 >
                   {step.label}
                   {state === "unavailable" && (
-                    <span className="ml-1.5 text-[10px] font-medium uppercase tracking-wide text-[#b8d0b4] align-middle">
+                    <span className="ml-1.5 align-middle text-[10px] font-medium uppercase tracking-wide text-[#b8d0b4]">
                       soon
                     </span>
                   )}
@@ -228,17 +226,16 @@ export const PipelinePanel: React.FC<PipelinePanelProps> = ({
         })}
       </div>
 
-      {/* Job metadata */}
       {job && (
-        <div className="mt-1 rounded-xl border border-[#d4e8ce] bg-[#f4fbf1] px-4 py-3 space-y-2">
-          <h3 className="text-xs font-bold uppercase tracking-widest text-[#4f8957] mb-2">
+        <div className="mt-1 space-y-2 rounded-xl border border-[#d4e8ce] bg-[#f4fbf1] px-4 py-3">
+          <h3 className="mb-2 text-xs font-bold uppercase tracking-widest text-[#4f8957]">
             Job Details
           </h3>
           <dl className="space-y-1.5">
             <div className="flex items-start justify-between gap-2">
-              <dt className="text-xs text-[#7a9e82] shrink-0">Job ID</dt>
+              <dt className="shrink-0 text-xs text-[#7a9e82]">Job ID</dt>
               <dd
-                className="text-xs font-mono font-medium text-[#2b4a37] truncate max-w-35"
+                className="max-w-35 truncate text-xs font-medium text-[#2b4a37]"
                 title={job.job_id}
               >
                 {job.job_id}
@@ -246,7 +243,7 @@ export const PipelinePanel: React.FC<PipelinePanelProps> = ({
             </div>
             {job.created_at && (
               <div className="flex items-start justify-between gap-2">
-                <dt className="text-xs text-[#7a9e82] shrink-0">Started</dt>
+                <dt className="shrink-0 text-xs text-[#7a9e82]">Started</dt>
                 <dd className="text-xs font-medium text-[#2b4a37]">
                   {formatDate(job.created_at)}
                 </dd>
@@ -254,7 +251,7 @@ export const PipelinePanel: React.FC<PipelinePanelProps> = ({
             )}
             {job.updated_at && (
               <div className="flex items-start justify-between gap-2">
-                <dt className="text-xs text-[#7a9e82] shrink-0">Updated</dt>
+                <dt className="shrink-0 text-xs text-[#7a9e82]">Updated</dt>
                 <dd className="text-xs font-medium text-[#2b4a37]">
                   {formatDate(job.updated_at)}
                 </dd>
