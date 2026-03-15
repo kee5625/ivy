@@ -4,6 +4,8 @@ export type JobStatus =
   | "ingestion_complete"
   | "timeline_in_progress"
   | "timeline_complete"
+  | "plot_hole_in_progress"
+  | "plot_hole_complete"
   | "failed";
 
 export type Job = {
@@ -74,17 +76,17 @@ export const PIPELINE_STEPS: PipelineStep[] = [
   {
     id: "plot_hole_agent",
     label: "Issues",
-    description: "Reserved for the next pass of plot-hole and inconsistency checks.",
-    available: false,
+    description: "Review the finished timeline for concrete contradictions and unresolved setups.",
+    available: true,
   },
 ];
 
 export function isTerminalJobStatus(status: JobStatus | string): boolean {
-  return status === "timeline_complete" || status === "failed";
+  return status === "plot_hole_complete" || status === "failed";
 }
 
 export function isResultsReadyStatus(status: JobStatus | string): boolean {
-  return status === "timeline_complete";
+  return status === "plot_hole_complete";
 }
 
 // Legacy - kept so JobStatus component import doesn't break

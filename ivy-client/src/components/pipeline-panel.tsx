@@ -116,7 +116,9 @@ export const PipelinePanel: React.FC<PipelinePanelProps> = ({
     ingestion_in_progress: "Ingestion in progress",
     ingestion_complete: "Ingestion complete",
     timeline_in_progress: "Timeline in progress",
-    timeline_complete: "Timeline ready",
+    timeline_complete: "Timeline complete",
+    plot_hole_in_progress: "Issue scan in progress",
+    plot_hole_complete: "Results ready",
     failed: "Failed",
   };
 
@@ -125,7 +127,9 @@ export const PipelinePanel: React.FC<PipelinePanelProps> = ({
     ingestion_in_progress: "bg-[#4f8957] animate-pulse",
     ingestion_complete: "bg-[#9dc69f]",
     timeline_in_progress: "bg-[#4f8957] animate-pulse",
-    timeline_complete: "bg-[#4f8957]",
+    timeline_complete: "bg-[#9dc69f]",
+    plot_hole_in_progress: "bg-[#4f8957] animate-pulse",
+    plot_hole_complete: "bg-[#4f8957]",
     failed: "bg-red-500",
   };
 

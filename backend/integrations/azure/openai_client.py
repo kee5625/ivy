@@ -18,7 +18,14 @@ def get_openai_client() -> AsyncOpenAI | None:
 
     base_timeout_seconds = float(os.getenv("OPENAI_TIMEOUT_SECONDS", "60"))
     merge_timeout_seconds = float(os.getenv("TIMELINE_MERGE_TIMEOUT_SECONDS", "45"))
-    timeout_seconds = max(base_timeout_seconds, merge_timeout_seconds)
+    plot_hole_timeout_seconds = float(
+        os.getenv("PLOT_HOLE_TIMEOUT_SECONDS", "45")
+    )
+    timeout_seconds = max(
+        base_timeout_seconds,
+        merge_timeout_seconds,
+        plot_hole_timeout_seconds,
+    )
 
     return AsyncOpenAI(
         api_key=api_key,

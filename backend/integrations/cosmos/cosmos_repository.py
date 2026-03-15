@@ -18,7 +18,7 @@ class JobDocument(TypedDict):
     job_id: str
     type: str
     status: str
-    current_agent: str
+    current_agent: str | None
     blob_name: str
     completed_agents: list[str]
     error: str | None
@@ -122,12 +122,15 @@ def create_job(blob_name: str) -> str:
     return job_id
 
 
+_UNSET = object()
+
+
 def update_job_status(
     job_id: str,
     status: str,
-    current_agent: str | None = None,
-    completed_agents: list[str] | None = None,
-    error: str | None = None,
+    current_agent: str | None | object = _UNSET,
+    completed_agents: list[str] | None | object = _UNSET,
+    error: str | None | object = _UNSET,
 ) -> None:
     """Patch a job document with new status and agent progress."""
     container = _get_container()
@@ -135,11 +138,11 @@ def update_job_status(
         {"op": "replace", "path": "/status", "value": status},
         {"op": "replace", "path": "/updated_at", "value": _now()},
     ]
-    if current_agent is not None:
+    if current_agent is not _UNSET:
         patch_ops.append({"op": "replace", "path": "/current_agent", "value": current_agent})
-    if completed_agents is not None:
+    if completed_agents is not _UNSET:
         patch_ops.append({"op": "replace", "path": "/completed_agents", "value": completed_agents})
-    if error is not None:
+    if error is not _UNSET:
         patch_ops.append({"op": "replace", "path": "/error", "value": error})
 
     container.patch_item(item=job_id, partition_key=job_id, patch_operations=patch_ops)
@@ -357,15 +360,16 @@ def upsert_plot_hole(
     chapters_involved: list[int],
     characters_involved: list[str] | None = None,
     events_involved: list[str] | None = None,
+    hole_id: str | None = None,
 ) -> None:
     """Write a single plot hole found by the plot hole agent."""
-    hole_id = uuid4().hex[:8]
+    resolved_hole_id = hole_id or uuid4().hex[:8]
     container = _get_container()
     container.upsert_item({
-        "id": f"{job_id}_hole_{hole_id}",
+        "id": f"{job_id}_hole_{resolved_hole_id}",
         "job_id": job_id,
         "type": "plot_hole",
-        "hole_id": hole_id,
+        "hole_id": resolved_hole_id,
         "hole_type": hole_type,
         "severity": severity,
         "description": description,
@@ -373,6 +377,16 @@ def upsert_plot_hole(
         "characters_involved": characters_involved or [],
         "events_involved": events_involved or [],
     })
+
+
+def delete_plot_holes(job_id: str) -> int:
+    """Delete all plot holes for a job so reruns do not retain stale findings."""
+    container = _get_container()
+    deleted = 0
+    for item in get_plot_holes(job_id):
+        container.delete_item(item=item["id"], partition_key=job_id)
+        deleted += 1
+    return deleted
 
 
 def get_plot_holes(
@@ -387,7 +401,8 @@ def get_plot_holes(
     if severity:
         query = (
             "SELECT * FROM c "
-            "WHERE c.job_id = @job_id AND c.type = 'plot_hole' AND c.severity = @severity"
+            "WHERE c.job_id = @job_id AND c.type = 'plot_hole' AND c.severity = @severity "
+            "ORDER BY c.hole_id"
         )
         params = [
             {"name": "@job_id", "value": job_id},
@@ -396,7 +411,8 @@ def get_plot_holes(
     else:
         query = (
             "SELECT * FROM c "
-            "WHERE c.job_id = @job_id AND c.type = 'plot_hole'"
+            "WHERE c.job_id = @job_id AND c.type = 'plot_hole' "
+            "ORDER BY c.hole_id"
         )
         params = [{"name": "@job_id", "value": job_id}]
 
