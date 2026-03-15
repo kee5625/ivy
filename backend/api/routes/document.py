@@ -15,11 +15,20 @@ router = APIRouter(tags=["documents"])
 
 async def _run_ingestion(openai_client, job_id: str, blob_name: str) -> None:
     try:
+        logger.info(
+            "[pipeline] job=%s starting background pipeline for blob=%s",
+            job_id,
+            blob_name,
+        )
         ingestion_agent = IngestionAgent(openai_client=openai_client, job_id=job_id)
+        logger.info("[pipeline] job=%s invoking ingestion agent", job_id)
         await ingestion_agent.run(blob_name)
+        logger.info("[pipeline] job=%s ingestion agent complete", job_id)
 
         timeline_agent = TimelineAgent(openai_client=openai_client, job_id=job_id)
+        logger.info("[pipeline] job=%s invoking timeline agent", job_id)
         await timeline_agent.run()
+        logger.info("[pipeline] job=%s timeline agent complete", job_id)
     except Exception:
         import traceback, sys
         traceback.print_exc(file=sys.stderr)
@@ -60,7 +69,12 @@ async def upload_pdf(
     # 3. Fire ingestion agent in the background -- route returns immediately
     openai_client = request.app.state.openai_client
     background_tasks.add_task(_run_ingestion, openai_client, job_id, uploaded["blob_name"])
-    logger.info("Ingestion agent queued for job: %s", job_id)
+    logger.info(
+        "Pipeline queued for job=%s (blob=%s, openai_configured=%s)",
+        job_id,
+        uploaded["blob_name"],
+        openai_client is not None,
+    )
 
     return {
         "status": "accepted",

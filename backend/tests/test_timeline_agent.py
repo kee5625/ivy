@@ -1,31 +1,37 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from types import SimpleNamespace
 
 import pytest
 
 from agents.timeline_agent import TimelineAgent
-from pipeline_status import STATUS_FAILED, STATUS_TIMELINE_COMPLETE, STATUS_TIMELINE_IN_PROGRESS
+from pipeline_status import (
+    STATUS_FAILED,
+    STATUS_TIMELINE_COMPLETE,
+    STATUS_TIMELINE_IN_PROGRESS,
+)
 
 
 class FakeCompletions:
-    def __init__(self, payload: dict[str, object]):
-        self.payload = payload
+    def __init__(self, responder):
+        self.responder = responder
 
-    async def create(self, **_: object) -> SimpleNamespace:
+    async def create(self, **kwargs: object) -> SimpleNamespace:
+        payload = self.responder(kwargs)
         return SimpleNamespace(
             choices=[
                 SimpleNamespace(
-                    message=SimpleNamespace(content=json.dumps(self.payload))
+                    message=SimpleNamespace(content=json.dumps(payload))
                 )
             ]
         )
 
 
 class FakeOpenAIClient:
-    def __init__(self, payload: dict[str, object]):
-        self.chat = SimpleNamespace(completions=FakeCompletions(payload))
+    def __init__(self, responder):
+        self.chat = SimpleNamespace(completions=FakeCompletions(responder))
 
 
 def test_build_llm_input_filters_and_limits_summary_text() -> None:
@@ -48,7 +54,6 @@ def test_build_llm_input_filters_and_limits_summary_text() -> None:
         {
             "chapter_num": 2,
             "chapter_title": "Arrival",
-            "summary": [" first beat ", ""],
             "summary_text": "first beat",
             "key_events": ["event"],
             "characters": ["Harry", "Ron"],
@@ -57,34 +62,59 @@ def test_build_llm_input_filters_and_limits_summary_text() -> None:
     ]
 
 
-def test_normalize_events_resequences_and_remaps_references() -> None:
+def test_normalize_local_events_assigns_deterministic_ids() -> None:
+    agent = TimelineAgent(openai_client=object(), job_id="job-123")
+
+    chapter = {"chapter_num": 3, "chapter_title": "The Forest"}
+    raw_events = [
+        {
+            "description": "Harry enters the forest.",
+            "characters_present": ["Harry"],
+            "location": "forest",
+            "time_reference": "that night",
+            "confidence": 0.9,
+        },
+        {
+            "description": "He sees something drinking blood.",
+            "characters_present": ["Harry", "Firenze"],
+            "location": None,
+            "time_reference": None,
+            "confidence": 0.85,
+        },
+    ]
+
+    result = agent._normalize_local_events(chapter, raw_events)
+
+    assert [event["source_event_id"] for event in result] == [
+        "ch_03_evt_01",
+        "ch_03_evt_02",
+    ]
+    assert result[0]["chapter_num"] == 3
+    assert result[1]["order"] == 2
+
+
+def test_normalize_events_resequences_chapter_scoped_ids_and_remaps_references() -> None:
     agent = TimelineAgent(openai_client=object(), job_id="job-123")
 
     normalized = agent._normalize_events(
         [
             {
-                "event_id": "evt_020",
+                "event_id": "ch_02_evt_01",
                 "description": "Second chronologically",
                 "chapter_num": 2,
                 "order": 2,
                 "causes": [],
-                "caused_by": ["evt_010"],
-                "relative_time_anchor": "after evt_010",
+                "caused_by": ["ch_01_evt_01"],
+                "relative_time_anchor": "after ch_01_evt_01",
             },
             {
-                "event_id": "evt_010",
+                "event_id": "ch_01_evt_01",
                 "description": "First chronologically",
                 "chapter_num": 1,
                 "order": 1,
-                "causes": ["evt_020", "evt_999"],
+                "causes": ["ch_02_evt_01", "missing_evt"],
                 "caused_by": [],
                 "relative_time_anchor": None,
-            },
-            {
-                "event_id": "evt_030",
-                "description": "  ",
-                "chapter_num": 3,
-                "order": 3,
             },
         ]
     )
@@ -96,35 +126,232 @@ def test_normalize_events_resequences_and_remaps_references() -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_persists_events_and_updates_job_status(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_extract_local_timelines_respects_configured_concurrency(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TIMELINE_CHAPTER_CONCURRENCY", "2")
+    agent = TimelineAgent(openai_client=object(), job_id="job-123")
+
     chapters = [
-        {"chapter_num": 2, "chapter_title": "Later", "summary": [], "key_events": [], "characters": [], "temporal_markers": []},
-        {"chapter_num": 1, "chapter_title": "Start", "summary": [], "key_events": [], "characters": [], "temporal_markers": []},
+        {"chapter_num": 1},
+        {"chapter_num": 2},
+        {"chapter_num": 3},
+        {"chapter_num": 4},
     ]
-    llm_payload = {
-        "events": [
+
+    active = 0
+    max_active = 0
+
+    async def fake_with_retry(chapter: dict[str, object]) -> list[dict[str, object]]:
+        nonlocal active, max_active
+        active += 1
+        max_active = max(max_active, active)
+        await asyncio.sleep(0.01)
+        active -= 1
+        return [
             {
-                "event_id": "evt_100",
-                "description": "Late event",
-                "chapter_num": 2,
-                "chapter_title": "Later",
-                "order": 2,
-                "caused_by": ["evt_001"],
-                "causes": [],
-            },
+                "source_event_id": f"ch_{int(chapter['chapter_num']):02d}_evt_01",
+                "description": "event",
+                "chapter_num": chapter["chapter_num"],
+                "chapter_title": "",
+                "order": 1,
+                "characters_present": [],
+                "location": None,
+                "time_reference": None,
+                "confidence": 0.8,
+            }
+        ]
+
+    monkeypatch.setattr(
+        agent,
+        "_extract_local_timeline_for_chapter_with_retry",
+        fake_with_retry,
+    )
+
+    results = await agent._extract_local_timelines(chapters)
+
+    assert len(results) == 4
+    assert max_active <= 2
+
+
+@pytest.mark.asyncio
+async def test_local_timeline_retries_once_then_succeeds(monkeypatch: pytest.MonkeyPatch) -> None:
+    agent = TimelineAgent(openai_client=object(), job_id="job-123")
+    chapter = {"chapter_num": 1, "chapter_title": "Start"}
+    attempts = {"count": 0}
+
+    async def fake_request(chapter_arg: dict[str, object], attempt: int) -> list[dict[str, object]]:
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            raise RuntimeError("timeout")
+        return [
             {
-                "event_id": "evt_001",
-                "description": "Early event",
+                "source_event_id": "ch_01_evt_01",
+                "description": "Recovered",
                 "chapter_num": 1,
                 "chapter_title": "Start",
                 "order": 1,
-                "caused_by": [],
-                "causes": ["evt_100"],
-            },
+                "characters_present": [],
+                "location": None,
+                "time_reference": None,
+                "confidence": 0.7,
+            }
         ]
-    }
+
+    monkeypatch.setattr(agent, "_request_local_timeline", fake_request)
+
+    result = await agent._extract_local_timeline_for_chapter_with_retry(chapter)
+
+    assert len(result) == 1
+    assert attempts["count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_merge_retries_once_then_succeeds(monkeypatch: pytest.MonkeyPatch) -> None:
+    agent = TimelineAgent(openai_client=object(), job_id="job-123")
+    local_events = [
+        {
+            "source_event_id": "ch_01_evt_01",
+            "description": "First",
+            "chapter_num": 1,
+            "chapter_title": "Start",
+            "order": 1,
+            "characters_present": ["Harry"],
+            "location": None,
+            "time_reference": None,
+            "confidence": 0.8,
+        }
+    ]
+    attempts = {"count": 0}
+
+    async def fake_create(**kwargs: object) -> SimpleNamespace:
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            raise RuntimeError("timeout")
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        content=json.dumps(
+                            {
+                                "events": [
+                                    {
+                                        "source_event_id": "ch_01_evt_01",
+                                        "description": "First",
+                                        "chapter_num": 1,
+                                        "chapter_title": "Start",
+                                        "order": 1,
+                                        "characters_present": ["Harry"],
+                                        "location": None,
+                                        "causes": [],
+                                        "caused_by": [],
+                                        "time_reference": None,
+                                        "inferred_date": None,
+                                        "inferred_year": None,
+                                        "relative_time_anchor_event_id": None,
+                                        "confidence": 0.8,
+                                    }
+                                ]
+                            }
+                        )
+                    )
+                )
+            ]
+        )
+
+    agent.openai = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=fake_create)))
+
+    result = await agent._merge_local_timelines(local_events)
+
+    assert result[0]["event_id"] == "evt_001"
+    assert attempts["count"] == 2
+
+
+@pytest.mark.asyncio
+async def test_run_persists_events_and_updates_job_status(monkeypatch: pytest.MonkeyPatch) -> None:
+    chapters = [
+        {
+            "chapter_num": 2,
+            "chapter_title": "Later",
+            "summary": [],
+            "key_events": [],
+            "characters": [],
+            "temporal_markers": [],
+        },
+        {
+            "chapter_num": 1,
+            "chapter_title": "Start",
+            "summary": [],
+            "key_events": [],
+            "characters": [],
+            "temporal_markers": [],
+        },
+    ]
     persisted: list[dict[str, object]] = []
     status_updates: list[dict[str, object]] = []
+
+    def responder(kwargs: dict[str, object]) -> dict[str, object]:
+        prompt = str(kwargs["messages"][0]["content"])
+        if "working on one chapter only" in prompt and '"chapter_num": 1' in prompt:
+            return {
+                "events": [
+                    {
+                        "description": "Early event",
+                        "characters_present": ["Harry"],
+                        "location": None,
+                        "time_reference": "that night",
+                        "confidence": 0.88,
+                    }
+                ]
+            }
+        if "working on one chapter only" in prompt and '"chapter_num": 2' in prompt:
+            return {
+                "events": [
+                    {
+                        "description": "Late event",
+                        "characters_present": ["Ron"],
+                        "location": None,
+                        "time_reference": None,
+                        "confidence": 0.8,
+                    }
+                ]
+            }
+        return {
+            "events": [
+                {
+                    "source_event_id": "ch_01_evt_01",
+                    "description": "Early event",
+                    "chapter_num": 1,
+                    "chapter_title": "Start",
+                    "order": 1,
+                    "characters_present": ["Harry"],
+                    "location": None,
+                    "causes": ["ch_02_evt_01"],
+                    "caused_by": [],
+                    "time_reference": "that night",
+                    "inferred_date": None,
+                    "inferred_year": None,
+                    "relative_time_anchor_event_id": None,
+                    "confidence": 0.88,
+                },
+                {
+                    "source_event_id": "ch_02_evt_01",
+                    "description": "Late event",
+                    "chapter_num": 2,
+                    "chapter_title": "Later",
+                    "order": 2,
+                    "characters_present": ["Ron"],
+                    "location": None,
+                    "causes": [],
+                    "caused_by": ["ch_01_evt_01"],
+                    "time_reference": None,
+                    "inferred_date": None,
+                    "inferred_year": None,
+                    "relative_time_anchor_event_id": "ch_01_evt_01",
+                    "confidence": 0.8,
+                },
+            ]
+        }
 
     monkeypatch.setattr("agents.timeline_agent.get_chapters", lambda job_id: chapters)
     monkeypatch.setattr(
@@ -140,7 +367,7 @@ async def test_run_persists_events_and_updates_job_status(monkeypatch: pytest.Mo
         lambda job_id: {"job": {"completed_agents": ["ingestion_agent"]}},
     )
 
-    agent = TimelineAgent(openai_client=FakeOpenAIClient(llm_payload), job_id="job-abc")
+    agent = TimelineAgent(openai_client=FakeOpenAIClient(responder), job_id="job-abc")
 
     result = await agent.run()
 
@@ -153,6 +380,7 @@ async def test_run_persists_events_and_updates_job_status(monkeypatch: pytest.Mo
     assert [event["event_id"] for event in persisted] == ["evt_001", "evt_002"]
     assert persisted[0]["causes"] == ["evt_002"]
     assert persisted[1]["caused_by"] == ["evt_001"]
+    assert persisted[1]["relative_time_anchor"] == "after evt_001"
 
 
 @pytest.mark.asyncio
@@ -173,4 +401,3 @@ async def test_run_marks_job_failed_when_no_chapters_found(monkeypatch: pytest.M
     assert status_updates[0]["status"] == STATUS_TIMELINE_IN_PROGRESS
     assert status_updates[-1]["status"] == STATUS_FAILED
     assert "No chapters found" in status_updates[-1]["error"]
-
