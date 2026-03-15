@@ -2,98 +2,11 @@ import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { ChapterCard } from "@/components/chapter-card";
+import { TimelineRail } from "@/components/timeline-rail";
 import { useJobResults } from "@/hooks/useJobResults";
-import type { PlotHole, TimelineEvent } from "@/types/graph";
+import type { PlotHole } from "@/types/graph";
 
 type TabKey = "chapters" | "timeline" | "issues";
-
-function formatConfidence(confidence: number | null): string {
-  if (confidence === null || Number.isNaN(confidence)) {
-    return "N/A";
-  }
-
-  return `${Math.round(confidence * 100)}%`;
-}
-
-function TimelineList({ events }: { events: TimelineEvent[] }) {
-  if (events.length === 0) {
-    return (
-      <div className="rounded-3xl border border-dashed border-[#caded1] bg-[#f7fbf5] px-6 py-10 text-sm text-[#5a7a62]">
-        No timeline events have been generated for this job yet.
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      {events.map((event) => (
-        <article
-          key={event.event_id}
-          className="rounded-3xl border border-[#c5dfbf] bg-white px-5 py-5 shadow-[0_16px_40px_-34px_rgba(50,93,60,0.3)]"
-        >
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full border border-[#c9e0c3] bg-[#eef8ea] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-[#4f8957]">
-                  {event.event_id}
-                </span>
-                <span className="rounded-full border border-[#d8e8d4] bg-[#f9fcf8] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-[#6e9576]">
-                  Chapter {event.chapter_num}
-                </span>
-                <span className="rounded-full border border-[#d8e8d4] bg-[#f9fcf8] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-[#6e9576]">
-                  Confidence {formatConfidence(event.confidence)}
-                </span>
-              </div>
-              <h3 className="mt-3 text-lg font-bold text-[#234231]">
-                {event.description}
-              </h3>
-              <p className="mt-1 text-sm text-[#607864]">{event.chapter_title}</p>
-            </div>
-
-            <div className="rounded-2xl border border-[#d6e8d0] bg-[#f7fbf5] px-4 py-3 text-sm text-[#4a6551]">
-              <p>Order #{event.order}</p>
-              {event.time_reference && <p className="mt-1">{event.time_reference}</p>}
-              {event.relative_time_anchor && (
-                <p className="mt-1">{event.relative_time_anchor}</p>
-              )}
-            </div>
-          </div>
-
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <div className="rounded-2xl bg-[#f6fbf4] px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#6e9576]">
-                Characters
-              </p>
-              <p className="mt-2 text-sm text-[#355342]">
-                {event.characters_present.length > 0
-                  ? event.characters_present.join(", ")
-                  : "None attached"}
-              </p>
-            </div>
-            <div className="rounded-2xl bg-[#f6fbf4] px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#6e9576]">
-                Causes
-              </p>
-              <p className="mt-2 text-sm text-[#355342]">
-                {event.causes.length > 0 ? event.causes.join(", ") : "No direct outgoing links"}
-              </p>
-            </div>
-            <div className="rounded-2xl bg-[#f6fbf4] px-4 py-3">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-[#6e9576]">
-                Caused By
-              </p>
-              <p className="mt-2 text-sm text-[#355342]">
-                {event.caused_by.length > 0
-                  ? event.caused_by.join(", ")
-                  : "No direct incoming links"}
-              </p>
-            </div>
-          </div>
-        </article>
-      ))}
-    </div>
-  );
-}
 
 function IssuesList({ plotHoles }: { plotHoles: PlotHole[] }) {
   if (plotHoles.length === 0) {
@@ -231,7 +144,7 @@ export default function ResultsPage() {
             )}
 
             {!isLoading && !error && activeTab === "timeline" && (
-              <TimelineList events={timelineEvents} />
+              <TimelineRail events={timelineEvents} />
             )}
 
             {!isLoading && !error && activeTab === "issues" && (
