@@ -5,6 +5,7 @@ import logging
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Request, UploadFile
 
 from agents.ingestion_agent import IngestionAgent
+from agents.timeline_agent import TimelineAgent
 from integrations.azure.blob_repository import upload_pdf_bytes
 from integrations.cosmos.cosmos_repository import create_job
 
@@ -14,8 +15,11 @@ router = APIRouter(tags=["documents"])
 
 async def _run_ingestion(openai_client, job_id: str, blob_name: str) -> None:
     try:
-        agent = IngestionAgent(openai_client=openai_client, job_id=job_id)
-        await agent.run(blob_name)
+        ingestion_agent = IngestionAgent(openai_client=openai_client, job_id=job_id)
+        await ingestion_agent.run(blob_name)
+
+        timeline_agent = TimelineAgent(openai_client=openai_client, job_id=job_id)
+        await timeline_agent.run()
     except Exception:
         import traceback, sys
         traceback.print_exc(file=sys.stderr)
@@ -107,5 +111,39 @@ async def get_job_chapters(job_id: str) -> dict[str, object]:
                 "characters": ch["characters"],
             }
             for ch in chapters
+        ],
+    }
+
+
+@router.get("/jobs/{job_id}/timeline")
+async def get_job_timeline(job_id: str) -> dict[str, object]:
+    from integrations.cosmos.cosmos_repository import get_timeline_events
+    try:
+        timeline_events = get_timeline_events(job_id)
+    except Exception as exc:
+        logger.exception("Failed to fetch timeline for job %s", job_id)
+        raise HTTPException(status_code=500, detail="Failed to fetch timeline events") from exc
+
+    return {
+        "job_id": job_id,
+        "timeline_event_count": len(timeline_events),
+        "timeline_events": [
+            {
+                "event_id": evt["event_id"],
+                "description": evt["description"],
+                "chapter_num": evt["chapter_num"],
+                "chapter_title": evt.get("chapter_title", ""),
+                "order": evt["order"],
+                "characters_present": evt.get("characters_present", []),
+                "location": evt.get("location"),
+                "causes": evt.get("causes", []),
+                "caused_by": evt.get("caused_by", []),
+                "time_reference": evt.get("time_reference"),
+                "inferred_date": evt.get("inferred_date"),
+                "inferred_year": evt.get("inferred_year"),
+                "relative_time_anchor": evt.get("relative_time_anchor"),
+                "confidence": evt.get("confidence"),
+            }
+            for evt in timeline_events
         ],
     }
