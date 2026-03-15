@@ -1,240 +1,173 @@
-import { useParams } from "react-router-dom";
-import { useJobPolling } from "@/hooks/useJobPolling";
+import { Link, useParams } from "react-router-dom";
+
 import { PipelinePanel } from "@/components/pipeline-panel";
-import { ChapterCard } from "@/components/chapter-card";
+import { useJobPolling } from "@/hooks/useJobPolling";
+import { isResultsReadyStatus } from "@/types/graph";
+
+const ACTIVE_COPY: Record<string, { title: string; body: string }> = {
+  pending: {
+    title: "Queued for processing",
+    body: "Your upload has been accepted and the backend is preparing the pipeline.",
+  },
+  ingestion_in_progress: {
+    title: "Extracting the story structure",
+    body: "Ivy is parsing the PDF, breaking it into chapters, and storing the chapter summaries and key events.",
+  },
+  ingestion_complete: {
+    title: "Chapters extracted",
+    body: "Ingestion finished successfully. The timeline agent is next and will build a full chronological story view.",
+  },
+  timeline_in_progress: {
+    title: "Building the complete timeline",
+    body: "The backend is ordering events across the full story and preserving causal links between them.",
+  },
+  timeline_complete: {
+    title: "Timeline results are ready",
+    body: "The merge-ready timeline feature has finished. You can open the new results page to inspect chapters, timeline events, and the placeholder issues tab.",
+  },
+  failed: {
+    title: "Pipeline stopped",
+    body: "The job failed before timeline completion. Review the error details below before retrying.",
+  },
+};
 
 export default function JobDetailsPage() {
   const { jobId } = useParams<{ jobId: string }>();
-  const { job, chapters, isLoading, error } = useJobPolling(jobId ?? "");
+  const { job, isLoading, error } = useJobPolling(jobId ?? "");
 
-  const isComplete = job?.status === "ingestion_complete";
-  const isFailed = job?.status === "failed";
+  const currentStatus = job?.status ?? "pending";
+  const statusCopy = ACTIVE_COPY[currentStatus] ?? ACTIVE_COPY.pending;
+  const canSeeResults = job ? isResultsReadyStatus(job.status) : false;
 
   return (
     <div className="min-h-screen bg-linear-to-b from-[#f4fbf1] via-[#fbfef9] to-[#f5faf3] px-5 py-10 text-[#2b4a37] sm:px-8 lg:px-12">
-      {/* Subtle decorative blobs */}
       <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
         <div className="absolute -left-20 top-10 h-64 w-64 rounded-full bg-[#d8ebd2]/50 blur-3xl" />
         <div className="absolute -right-24 top-20 h-72 w-72 rounded-full bg-[#e5f3df]/60 blur-3xl" />
         <div className="absolute bottom-0 left-1/2 h-48 w-96 -translate-x-1/2 rounded-full bg-[#eaf5e4]/40 blur-3xl" />
       </div>
 
-      <div className="mx-auto max-w-7xl">
-        {/* Page header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-extrabold tracking-tight text-[#234231] sm:text-4xl">
-            Analysis Pipeline
-          </h1>
-          <p className="mt-1.5 text-sm text-[#5a7a62]">
-            Job{" "}
-            <span className="font-mono font-semibold text-[#2b4a37]">
-              {jobId}
-            </span>
-          </p>
+      <div className="mx-auto max-w-6xl">
+        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#6e9576]">
+              Timeline Pipeline
+            </p>
+            <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-[#234231] sm:text-4xl">
+              Job Monitor
+            </h1>
+            <p className="mt-2 text-sm text-[#5a7a62]">
+              Job{" "}
+              <span className="font-mono font-semibold text-[#2b4a37]">
+                {jobId}
+              </span>
+            </p>
+          </div>
+
+          <Link
+            to={`/results/${jobId}`}
+            aria-disabled={!canSeeResults}
+            className={`inline-flex items-center justify-center rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
+              canSeeResults
+                ? "bg-[#4f8957] text-white shadow-[0_14px_30px_-20px_rgba(50,93,60,0.55)] hover:bg-[#42774a]"
+                : "cursor-not-allowed border border-[#c9dec5] bg-white/70 text-[#9ab8a0]"
+            }`}
+          >
+            See Results
+          </Link>
         </div>
 
-        {/* Completion banner */}
-        {isComplete && (
-          <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-[#a8d4a0] bg-[#eef8ea] px-5 py-4 shadow-[0_4px_18px_-8px_rgba(50,93,60,0.18)] sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
-              {/* Checkmark circle */}
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#4f8957] text-white shadow-sm">
-                <svg
-                  viewBox="0 0 20 20"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="h-5 w-5"
-                  aria-hidden
-                >
-                  <path
-                    d="M4 10.5L8.5 15L16 6"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </span>
-              <div>
-                <p className="font-bold text-[#2b4a37]">Analysis complete</p>
-                <p className="text-sm text-[#5a7a62]">
-                  {chapters.length} chapter{chapters.length !== 1 ? "s" : ""}{" "}
-                  extracted and ready to explore.
-                </p>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              disabled
-              className="inline-flex cursor-not-allowed items-center gap-2 rounded-xl border border-[#b8d5b1] bg-white/70 px-4 py-2 text-sm font-semibold text-[#9ab8a0] shadow-sm"
-              title="Graph view coming soon"
-            >
-              <svg
-                viewBox="0 0 20 20"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-4 w-4"
-                aria-hidden
-              >
-                <circle
-                  cx="5"
-                  cy="10"
-                  r="2.5"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                />
-                <circle
-                  cx="15"
-                  cy="5"
-                  r="2.5"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                />
-                <circle
-                  cx="15"
-                  cy="15"
-                  r="2.5"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                />
-                <path
-                  d="M7.5 9L12.5 6M7.5 11L12.5 14"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                  strokeLinecap="round"
-                />
-              </svg>
-              View Graph
-              <span className="rounded-full border border-[#c5dfbf] bg-[#f4fbf1] px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-[#7aa882]">
-                soon
-              </span>
-            </button>
-          </div>
-        )}
-
-        {/* Failed banner */}
-        {isFailed && (
-          <div className="mb-6 flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-5 py-4">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-100 text-red-600">
-              <svg
-                viewBox="0 0 16 16"
-                fill="none"
-                className="h-4 w-4"
-                aria-hidden
-              >
-                <path
-                  d="M8 3v5M8 11.5v.5"
-                  stroke="currentColor"
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                />
-                <circle
-                  cx="8"
-                  cy="8"
-                  r="6.5"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                />
-              </svg>
-            </span>
-            <div>
-              <p className="font-semibold text-red-700">Processing failed</p>
-              {job?.error && (
-                <p className="text-sm text-red-600">{job.error}</p>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Two-panel layout */}
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:gap-8">
-          {/* ── Left panel: pipeline progress ── */}
-          <aside className="w-full shrink-0 lg:w-72 xl:w-80">
-            <div className="sticky top-8 rounded-3xl border border-[#c5dfbf] bg-white/92 p-6 shadow-[0_20px_55px_-35px_rgba(50,93,60,0.28)]">
-              <h2 className="mb-5 text-xs font-bold uppercase tracking-widest text-[#4f8957]">
-                Pipeline Progress
-              </h2>
-              <PipelinePanel job={job} isLoading={isLoading} />
-            </div>
-          </aside>
-
-          {/* ── Right panel: chapter cards ── */}
-          <main className="min-w-0 flex-1">
-            {/* Empty / loading state */}
-            {chapters.length === 0 && !isFailed && (
-              <div className="flex flex-col items-center justify-center gap-4 rounded-3xl border border-dashed border-[#c5dfbf] bg-[#f4fbf1]/60 px-8 py-16 text-center">
-                {isLoading ||
-                job?.status === "in_progress" ||
-                job?.status === "pending" ? (
-                  <>
-                    {/* Animated leaf/dots loader */}
-                    <span className="flex gap-1.5" aria-hidden>
-                      {[0, 150, 300].map((delay) => (
-                        <span
-                          key={delay}
-                          className="h-2.5 w-2.5 rounded-full bg-[#4f8957] animate-bounce"
-                          style={{ animationDelay: `${delay}ms` }}
-                        />
-                      ))}
-                    </span>
-                    <p className="text-sm font-medium text-[#5a7a62]">
-                      Extracting chapters…
-                    </p>
-                    <p className="text-xs text-[#8db397]">
-                      Cards will appear here as each chapter finishes.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <span className="text-3xl" aria-hidden>
-                      📖
-                    </span>
-                    <p className="text-sm font-medium text-[#5a7a62]">
-                      No chapters found yet.
-                    </p>
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* Chapter cards grid */}
-            {chapters.length > 0 && (
-              <>
-                <div className="mb-4 flex items-center justify-between">
-                  <h2 className="text-xs font-bold uppercase tracking-widest text-[#4f8957]">
-                    Chapters
-                    <span className="ml-2 rounded-full border border-[#c5dfbf] bg-[#eef8ea] px-2 py-0.5 text-[11px] font-semibold text-[#4f8957]">
-                      {chapters.length}
-                    </span>
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_320px]">
+          <main className="space-y-6">
+            <section className="rounded-[2rem] border border-[#c5dfbf] bg-white/92 p-6 shadow-[0_20px_55px_-35px_rgba(50,93,60,0.28)] sm:p-8">
+              <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+                <div className="max-w-2xl">
+                  <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#6e9576]">
+                    Current Step
+                  </p>
+                  <h2 className="mt-3 text-2xl font-bold text-[#234231]">
+                    {isLoading && !job ? "Loading pipeline state..." : statusCopy.title}
                   </h2>
-                  {!isComplete && (
-                    <span className="flex items-center gap-1.5 text-xs text-[#7a9e82]">
-                      <span className="h-1.5 w-1.5 rounded-full bg-[#4f8957] animate-pulse" />
-                      Live
-                    </span>
-                  )}
+                  <p className="mt-3 text-sm leading-7 text-[#587160]">
+                    {statusCopy.body}
+                  </p>
                 </div>
 
-                <div className="flex flex-col gap-3">
-                  {chapters.map((chapter, index) => (
-                    <ChapterCard
-                      key={chapter.chapter_num}
-                      chapter={chapter}
-                      animationDelay={Math.min(index * 60, 300)}
-                    />
-                  ))}
+                <div className="rounded-2xl border border-[#d7e8d2] bg-[#f5fbf2] px-4 py-3 text-sm text-[#45624d]">
+                  <p className="font-semibold text-[#274232]">Results page</p>
+                  <p className="mt-1 leading-6">
+                    The dedicated results view stays separate from this monitor and becomes useful as soon as the timeline completes.
+                  </p>
                 </div>
-              </>
-            )}
+              </div>
 
-            {/* Error state */}
+              {job?.status === "failed" && job.error && (
+                <div className="mt-6 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">
+                  <p className="font-semibold">Processing failed</p>
+                  <p className="mt-1">{job.error}</p>
+                </div>
+              )}
+
+              {!canSeeResults && job?.status !== "failed" && (
+                <div className="mt-6 rounded-2xl border border-[#d8ead2] bg-[#f7fbf5] px-5 py-4 text-sm text-[#587160]">
+                  <p className="font-semibold text-[#294635]">Results unlock after timeline completion</p>
+                  <p className="mt-1">
+                    This page is intentionally focused on live pipeline status. Once the timeline finishes, the button above will take you to the tabbed results page.
+                  </p>
+                </div>
+              )}
+            </section>
+
+            <section className="rounded-[2rem] border border-[#c5dfbf] bg-[#f7fbf5] p-6 shadow-[0_18px_48px_-36px_rgba(50,93,60,0.28)] sm:p-8">
+              <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+                <div className="max-w-xl">
+                  <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#6e9576]">
+                    What ships in this branch
+                  </p>
+                  <h2 className="mt-3 text-xl font-bold text-[#234231]">
+                    Timeline first, issues later
+                  </h2>
+                  <p className="mt-3 text-sm leading-7 text-[#587160]">
+                    This merge pass makes the ingestion and timeline pipeline reliable, visible, and reviewable. The final plot-hole stage remains represented in the UI so the user journey already matches the fuller roadmap.
+                  </p>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2 md:max-w-sm md:grid-cols-1">
+                  <div className="rounded-2xl border border-[#d6e8d0] bg-white px-4 py-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#6e9576]">
+                      Now
+                    </p>
+                    <p className="mt-2 text-sm text-[#355342]">
+                      Ingestion and timeline run end to end, and results are readable from a dedicated page.
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-[#d6e8d0] bg-white px-4 py-4">
+                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#6e9576]">
+                      Next
+                    </p>
+                    <p className="mt-2 text-sm text-[#355342]">
+                      Plot-hole analysis will plug into the same pipeline and populate the Issues tab once merged.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </section>
+
             {error && !job && (
               <div className="rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm text-red-700">
                 <span className="font-semibold">Error:</span> {error}
               </div>
             )}
           </main>
+
+          <aside className="lg:sticky lg:top-8 lg:self-start">
+            <div className="rounded-[2rem] border border-[#c5dfbf] bg-white/92 p-6 shadow-[0_20px_55px_-35px_rgba(50,93,60,0.28)]">
+              <h2 className="mb-5 text-xs font-bold uppercase tracking-widest text-[#4f8957]">
+                Pipeline Progress
+              </h2>
+              <PipelinePanel job={job} isLoading={isLoading} />
+            </div>
+          </aside>
         </div>
       </div>
     </div>
