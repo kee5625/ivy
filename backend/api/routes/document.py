@@ -147,3 +147,31 @@ async def get_job_timeline(job_id: str) -> dict[str, object]:
             for evt in timeline_events
         ],
     }
+
+
+@router.get("/jobs/{job_id}/plot-holes")
+async def get_job_plot_holes(job_id: str) -> dict[str, object]:
+    from integrations.cosmos.cosmos_repository import get_plot_holes
+
+    try:
+        plot_holes = get_plot_holes(job_id)
+    except Exception as exc:
+        logger.exception("Failed to fetch plot holes for job %s", job_id)
+        raise HTTPException(status_code=500, detail="Failed to fetch plot holes") from exc
+
+    return {
+        "job_id": job_id,
+        "plot_hole_count": len(plot_holes),
+        "plot_holes": [
+            {
+                "hole_id": hole["hole_id"],
+                "hole_type": hole["hole_type"],
+                "severity": hole["severity"],
+                "description": hole["description"],
+                "chapters_involved": hole.get("chapters_involved", []),
+                "characters_involved": hole.get("characters_involved", []),
+                "events_involved": hole.get("events_involved", []),
+            }
+            for hole in plot_holes
+        ],
+    }

@@ -10,6 +10,11 @@ from integrations.cosmos.cosmos_repository import (
     update_job_status,
     upsert_chapter,
 )
+from pipeline_status import (
+    STATUS_FAILED,
+    STATUS_INGESTION_COMPLETE,
+    STATUS_INGESTION_IN_PROGRESS,
+)
 from services.parse_service import parse_and_clean
 
 logger = logging.getLogger(__name__)
@@ -45,7 +50,7 @@ class IngestionAgent:
             )
         update_job_status(
             self.job_id,
-            status="in_progress",
+            status=STATUS_INGESTION_IN_PROGRESS,
             current_agent="ingestion_agent",
         )
 
@@ -60,7 +65,7 @@ class IngestionAgent:
             await self._extract_all_chapters(chapters)
             update_job_status(
                 self.job_id,
-                status="ingestion_complete",
+                status=STATUS_INGESTION_COMPLETE,
                 current_agent="timeline_agent",
                 completed_agents=["ingestion_agent"],
             )
@@ -68,7 +73,7 @@ class IngestionAgent:
             logger.exception(
                 "[IngestionAgent] job=%s  ingestion failed", self.job_id
             )
-            update_job_status(self.job_id, status="failed", error=str(e))
+            update_job_status(self.job_id, status=STATUS_FAILED, error=str(e))
             raise
 
         return self.job_id

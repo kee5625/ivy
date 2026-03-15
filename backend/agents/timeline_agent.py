@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from typing import Any
 
 from integrations.cosmos.cosmos_repository import (
@@ -10,6 +11,11 @@ from integrations.cosmos.cosmos_repository import (
     get_full_job_state,
     update_job_status,
     upsert_timeline_event,
+)
+from pipeline_status import (
+    STATUS_FAILED,
+    STATUS_TIMELINE_COMPLETE,
+    STATUS_TIMELINE_IN_PROGRESS,
 )
 
 logger = logging.getLogger(__name__)
@@ -49,7 +55,7 @@ class TimelineAgent:
 
         update_job_status(
             self.job_id,
-            status="timeline_in_progress",
+            status=STATUS_TIMELINE_IN_PROGRESS,
             current_agent="timeline_agent",
         )
 
@@ -74,14 +80,14 @@ class TimelineAgent:
 
             update_job_status(
                 self.job_id,
-                status="timeline_complete",
+                status=STATUS_TIMELINE_COMPLETE,
                 current_agent="plot_hole_agent",
                 completed_agents=self._merge_completed_agents("timeline_agent"),
             )
             return self.job_id
         except Exception as exc:
             logger.exception("[TimelineAgent] job=%s timeline failed", self.job_id)
-            update_job_status(self.job_id, status="failed", error=str(exc))
+            update_job_status(self.job_id, status=STATUS_FAILED, error=str(exc))
             raise
 
     def _load_chapters(self) -> list[dict[str, Any]]:
@@ -285,6 +291,7 @@ class TimelineAgent:
 
             normalized.append(
                 {
+                    "_source_event_id": event_id,
                     "event_id": event_id,
                     "description": description.strip(),
                     "chapter_num": chapter_num,
@@ -303,10 +310,73 @@ class TimelineAgent:
             )
 
         normalized.sort(key=lambda e: int(e["order"]))
+        event_id_mapping: dict[str, str] = {}
         for idx, item in enumerate(normalized, start=1):
             item["order"] = idx
-            item["event_id"] = f"evt_{idx:03d}"
+            new_event_id = f"evt_{idx:03d}"
+            event_id_mapping[item["_source_event_id"]] = new_event_id
+            item["event_id"] = new_event_id
+
+        final_event_ids = set(event_id_mapping.values())
+        for item in normalized:
+            item["causes"] = self._remap_event_references(
+                item.get("causes", []),
+                event_id_mapping,
+                final_event_ids,
+            )
+            item["caused_by"] = self._remap_event_references(
+                item.get("caused_by", []),
+                event_id_mapping,
+                final_event_ids,
+            )
+            item["relative_time_anchor"] = self._remap_relative_time_anchor(
+                item.get("relative_time_anchor"),
+                event_id_mapping,
+                final_event_ids,
+            )
+            item.pop("_source_event_id", None)
         return normalized
+
+    def _remap_event_references(
+        self,
+        references: list[str],
+        event_id_mapping: dict[str, str],
+        final_event_ids: set[str],
+    ) -> list[str]:
+        remapped: list[str] = []
+        seen: set[str] = set()
+        for reference in references:
+            if reference in event_id_mapping:
+                candidate = event_id_mapping[reference]
+            elif reference in final_event_ids:
+                candidate = reference
+            else:
+                continue
+
+            if candidate not in seen:
+                seen.add(candidate)
+                remapped.append(candidate)
+
+        return remapped
+
+    def _remap_relative_time_anchor(
+        self,
+        relative_time_anchor: str | None,
+        event_id_mapping: dict[str, str],
+        final_event_ids: set[str],
+    ) -> str | None:
+        if relative_time_anchor is None:
+            return None
+
+        def _replace(match: re.Match[str]) -> str:
+            event_id = match.group(0)
+            if event_id in event_id_mapping:
+                return event_id_mapping[event_id]
+            if event_id in final_event_ids:
+                return event_id
+            return event_id
+
+        return re.sub(r"\bevt_\d{3}\b", _replace, relative_time_anchor)
 
     def _persist_events(self, events: list[dict[str, Any]]) -> int:
         count = 0
