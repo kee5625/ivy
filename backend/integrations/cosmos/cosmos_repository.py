@@ -315,7 +315,7 @@ def get_timeline_events(job_id: str) -> list[TimelineEventDocument]:
     query = (
         "SELECT * FROM c "
         "WHERE c.job_id = @job_id AND c.type = 'timeline_event' "
-        "ORDER BY c.order"
+        "ORDER BY c[\"order\"]"
     )
     items = container.query_items(
         query=query,
@@ -334,7 +334,7 @@ def get_timeline_events_for_chapter(
     query = (
         "SELECT * FROM c "
         "WHERE c.job_id = @job_id AND c.type = 'timeline_event' AND c.chapter_num = @chapter_num "
-        "ORDER BY c.order"
+        "ORDER BY c[\"order\"]"
     )
     items = container.query_items(
         query=query,
