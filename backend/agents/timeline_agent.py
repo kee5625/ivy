@@ -8,6 +8,8 @@ import re
 import time
 from typing import Any
 
+import httpx
+
 from integrations.cosmos.cosmos_repository import (
     get_chapters,
     get_full_job_state,
@@ -30,6 +32,11 @@ _MAX_CHARACTERS_PER_CHAPTER = 8
 _MAX_TEMPORAL_MARKERS_PER_CHAPTER = 4
 _LOCAL_RETRY_ATTEMPTS = 2
 _MERGE_RETRY_ATTEMPTS = 2
+
+
+def _get_optional_env(name: str) -> str | None:
+    value = os.getenv(name, "").strip()
+    return value or None
 
 
 def _get_int_env(name: str, default: int) -> int:
@@ -68,8 +75,35 @@ def _timeline_merge_model() -> str:
     return os.getenv("TIMELINE_MERGE_MODEL", "gpt-4.1")
 
 
+def _timeline_merge_endpoint() -> str | None:
+    return _get_optional_env("TIMELINE_MERGE_ENDPOINT")
+
+
+def _timeline_merge_key() -> str | None:
+    return (
+        _get_optional_env("TIMELINE_MERGE_KEY")
+        or _get_optional_env("OPENAI_MODEL_KEY")
+        or _get_optional_env("PROJECT_KEY")
+        or _get_optional_env("OPENAI_API_KEY")
+    )
+
+
 def _timeline_merge_fallback_model() -> str:
     return os.getenv("TIMELINE_MERGE_FALLBACK_MODEL", "gpt-4o-mini")
+
+
+def _timeline_merge_fallback_endpoint() -> str | None:
+    return _get_optional_env("TIMELINE_MERGE_FALLBACK_ENDPOINT")
+
+
+def _timeline_merge_fallback_key() -> str | None:
+    return (
+        _get_optional_env("TIMELINE_MERGE_FALLBACK_KEY")
+        or _get_optional_env("TIMELINE_MERGE_KEY")
+        or _get_optional_env("OPENAI_MODEL_KEY")
+        or _get_optional_env("PROJECT_KEY")
+        or _get_optional_env("OPENAI_API_KEY")
+    )
 
 
 def _timeline_local_timeout_seconds() -> float:
@@ -551,6 +585,16 @@ class TimelineAgent:
                 and fallback_model != primary_model
             )
             model_name = fallback_model if use_fallback_model else primary_model
+            endpoint = (
+                _timeline_merge_fallback_endpoint()
+                if use_fallback_model
+                else _timeline_merge_endpoint()
+            )
+            api_key = (
+                _timeline_merge_fallback_key()
+                if use_fallback_model
+                else _timeline_merge_key()
+            )
             start = time.perf_counter()
             logger.info(
                 "[TimelineAgent] job=%s sending %s request to model=%s attempt=%d/%d timeout=%.1fs payload_bytes=%d fallback_model=%s",
@@ -565,11 +609,13 @@ class TimelineAgent:
             )
 
             try:
-                response = await self.openai.chat.completions.create(
-                    model=model_name,
-                    messages=[{"role": "user", "content": prompt}],
+                raw_content = await self._request_merge_completion(
+                    prompt=prompt,
                     response_format=response_format,
-                    timeout=timeout_seconds,
+                    timeout_seconds=timeout_seconds,
+                    model_name=model_name,
+                    endpoint=endpoint,
+                    api_key=api_key,
                 )
                 elapsed = time.perf_counter() - start
                 logger.info(
@@ -578,7 +624,6 @@ class TimelineAgent:
                     operation_label,
                     elapsed,
                 )
-                raw_content = response.choices[0].message.content
                 parsed = json.loads(raw_content)
                 if not isinstance(parsed, dict):
                     raise RuntimeError(f"{operation_label} output invalid: expected object")
@@ -597,6 +642,87 @@ class TimelineAgent:
         raise RuntimeError(
             f"{operation_label} failed after {_MERGE_RETRY_ATTEMPTS} attempts: {repr(last_exc)}"
         ) from last_exc
+
+    async def _request_merge_completion(
+        self,
+        *,
+        prompt: str,
+        response_format: dict[str, Any],
+        timeout_seconds: float,
+        model_name: str,
+        endpoint: str | None,
+        api_key: str | None,
+    ) -> str:
+        if endpoint:
+            return await self._request_merge_completion_via_endpoint(
+                endpoint=endpoint,
+                api_key=api_key,
+                prompt=prompt,
+                response_format=response_format,
+                timeout_seconds=timeout_seconds,
+            )
+
+        if self.openai is None:
+            raise RuntimeError(
+                "Timeline merge client is not configured. "
+                "Set TIMELINE_MERGE_ENDPOINT or provide the shared OpenAI client."
+            )
+
+        response = await self.openai.chat.completions.create(
+            model=model_name,
+            messages=[{"role": "user", "content": prompt}],
+            response_format=response_format,
+            timeout=timeout_seconds,
+        )
+        return response.choices[0].message.content
+
+    async def _request_merge_completion_via_endpoint(
+        self,
+        *,
+        endpoint: str,
+        api_key: str | None,
+        prompt: str,
+        response_format: dict[str, Any],
+        timeout_seconds: float,
+    ) -> str:
+        if not api_key:
+            raise RuntimeError(
+                "TIMELINE_MERGE_ENDPOINT is configured without an API key. "
+                "Set TIMELINE_MERGE_KEY, OPENAI_MODEL_KEY, PROJECT_KEY, or OPENAI_API_KEY."
+            )
+
+        timeout = httpx.Timeout(
+            timeout=timeout_seconds,
+            connect=min(timeout_seconds, 10.0),
+            read=timeout_seconds,
+            write=min(timeout_seconds, 20.0),
+            pool=min(timeout_seconds, 10.0),
+        )
+        request_body = {
+            "messages": [{"role": "user", "content": prompt}],
+            "response_format": response_format,
+        }
+
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.post(
+                endpoint,
+                headers={
+                    "api-key": api_key,
+                    "Content-Type": "application/json",
+                },
+                json=request_body,
+            )
+            response.raise_for_status()
+            payload = response.json()
+
+        try:
+            raw_content = payload["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise RuntimeError("Timeline merge endpoint returned an invalid response payload") from exc
+
+        if not isinstance(raw_content, str):
+            raise RuntimeError("Timeline merge endpoint returned non-string message content")
+        return raw_content
 
     def _record_merge_degraded(self, reason: str) -> None:
         if reason not in self._merge_degraded_reasons:

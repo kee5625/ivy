@@ -229,6 +229,8 @@ async def test_local_timeline_retries_once_then_succeeds(monkeypatch: pytest.Mon
 
 @pytest.mark.asyncio
 async def test_merge_retries_once_then_succeeds(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("TIMELINE_MERGE_ENDPOINT", raising=False)
+    monkeypatch.delenv("TIMELINE_MERGE_FALLBACK_ENDPOINT", raising=False)
     agent = TimelineAgent(openai_client=object(), job_id="job-123")
     local_events = [
         {
@@ -289,7 +291,96 @@ async def test_merge_retries_once_then_succeeds(monkeypatch: pytest.MonkeyPatch)
 
 
 @pytest.mark.asyncio
+async def test_merge_uses_timeline_merge_endpoint_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    endpoint = (
+        "https://example-resource.cognitiveservices.azure.com/openai/deployments/"
+        "gpt-4.1/chat/completions?api-version=2024-05-01-preview"
+    )
+    monkeypatch.setenv("TIMELINE_MERGE_ENDPOINT", endpoint)
+    monkeypatch.setenv("TIMELINE_MERGE_KEY", "merge-key-123")
+    agent = TimelineAgent(openai_client=object(), job_id="job-123")
+    local_events = [
+        _make_local_event("ch_01_evt_01", "First local", 1, 1),
+    ]
+    captured: dict[str, object] = {}
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict[str, object]:
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "content": json.dumps(
+                                {
+                                    "events": [
+                                        {
+                                            "source_event_id": "ch_01_evt_01",
+                                            "description": "Merged first",
+                                            "chapter_num": 1,
+                                            "chapter_title": "Chapter 1",
+                                            "order": 1,
+                                            "characters_present": [],
+                                            "location": None,
+                                            "causes": [],
+                                            "caused_by": [],
+                                            "time_reference": None,
+                                            "inferred_date": None,
+                                            "inferred_year": None,
+                                            "relative_time_anchor_event_id": None,
+                                            "confidence": 0.8,
+                                        }
+                                    ]
+                                }
+                            )
+                        }
+                    }
+                ]
+            }
+
+    class FakeAsyncClient:
+        def __init__(self, **kwargs: object) -> None:
+            captured["timeout"] = kwargs["timeout"]
+
+        async def __aenter__(self) -> "FakeAsyncClient":
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        async def post(
+            self,
+            url: str,
+            *,
+            headers: dict[str, str],
+            json: dict[str, object],
+        ) -> FakeResponse:
+            captured["url"] = url
+            captured["headers"] = headers
+            captured["json"] = json
+            return FakeResponse()
+
+    monkeypatch.setattr("agents.timeline_agent.httpx.AsyncClient", FakeAsyncClient)
+
+    result = await agent._merge_local_timelines(local_events)
+
+    assert result[0]["event_id"] == "evt_001"
+    assert captured["url"] == endpoint
+    assert captured["headers"] == {
+        "api-key": "merge-key-123",
+        "Content-Type": "application/json",
+    }
+    assert "model" not in captured["json"]
+
+
+@pytest.mark.asyncio
 async def test_large_merge_batches_and_final_order(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("TIMELINE_MERGE_ENDPOINT", raising=False)
+    monkeypatch.delenv("TIMELINE_MERGE_FALLBACK_ENDPOINT", raising=False)
     monkeypatch.setenv("TIMELINE_MERGE_BATCH_EVENT_LIMIT", "2")
     agent = TimelineAgent(openai_client=None, job_id="job-123")
     local_events = [
@@ -402,6 +493,8 @@ async def test_large_merge_batches_and_final_order(monkeypatch: pytest.MonkeyPat
 async def test_batched_merge_timeout_uses_fallback_model_then_local_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.delenv("TIMELINE_MERGE_ENDPOINT", raising=False)
+    monkeypatch.delenv("TIMELINE_MERGE_FALLBACK_ENDPOINT", raising=False)
     monkeypatch.setenv("TIMELINE_MERGE_BATCH_EVENT_LIMIT", "2")
     monkeypatch.setenv("TIMELINE_MERGE_FALLBACK_MODEL", "gpt-4o-mini")
     agent = TimelineAgent(openai_client=None, job_id="job-123")
@@ -462,6 +555,8 @@ async def test_batched_merge_timeout_uses_fallback_model_then_local_fallback(
 async def test_final_order_timeout_degrades_to_chapter_local_order(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.delenv("TIMELINE_MERGE_ENDPOINT", raising=False)
+    monkeypatch.delenv("TIMELINE_MERGE_FALLBACK_ENDPOINT", raising=False)
     monkeypatch.setenv("TIMELINE_MERGE_BATCH_EVENT_LIMIT", "2")
     agent = TimelineAgent(openai_client=None, job_id="job-123")
     local_events = [
@@ -563,6 +658,8 @@ async def test_final_order_timeout_degrades_to_chapter_local_order(
 
 @pytest.mark.asyncio
 async def test_run_persists_events_and_updates_job_status(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("TIMELINE_MERGE_ENDPOINT", raising=False)
+    monkeypatch.delenv("TIMELINE_MERGE_FALLBACK_ENDPOINT", raising=False)
     chapters = [
         {
             "chapter_num": 2,
