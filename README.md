@@ -2,6 +2,7 @@
 
 Ivy is an Azure-backed story-analysis assistant for authors. It ingests a manuscript PDF, extracts chapter summaries and characters, builds a global timeline, and flags plot holes or inconsistencies before they slow a book down._
 
+DEMO: https://youtu.be/ekUmYZkNP70
 
 ---
 
