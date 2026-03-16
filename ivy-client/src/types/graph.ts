@@ -88,11 +88,3 @@ export function isTerminalJobStatus(status: JobStatus | string): boolean {
 export function isResultsReadyStatus(status: JobStatus | string): boolean {
   return status === "plot_hole_complete";
 }
-
-// Legacy - kept so JobStatus component import doesn't break
-export type JobStatusProps = {
-  jobId: string;
-  status: "pending" | "running" | "completed" | "failed";
-  progress?: number;
-  message?: string;
-};
