@@ -118,7 +118,8 @@ class PlotHoleAgent:
     async def run(self) -> str:
         if self.openai is None:
             raise RuntimeError(
-                "OpenAI client is not configured. Set OPENAI_API_KEY in your .env file."
+                "Azure AI Foundry client is not configured. "
+                "Set PROJECT_KEY and OPENAI_ENDPOINT (or PROJECT_ENDPOINT)."
             )
 
         start = time.perf_counter()

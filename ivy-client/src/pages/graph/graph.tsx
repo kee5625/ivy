@@ -59,17 +59,11 @@ export default function JobDetailsPage() {
         <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#6e9576]">
-              Timeline Pipeline
+              Processing
             </p>
             <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-[#234231] sm:text-4xl">
-              Job Monitor
+              Story Analysis Status
             </h1>
-            <p className="mt-2 text-sm text-[#5a7a62]">
-              Job{" "}
-              <span className="font-mono font-semibold text-[#2b4a37]">
-                {jobId}
-              </span>
-            </p>
           </div>
 
           <Link
@@ -88,7 +82,7 @@ export default function JobDetailsPage() {
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_320px]">
           <main className="space-y-6">
             <section className="rounded-[2rem] border border-[#c5dfbf] bg-white/92 p-6 shadow-[0_20px_55px_-35px_rgba(50,93,60,0.28)] sm:p-8">
-              <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex flex-col gap-5">
                 <div className="max-w-2xl">
                   <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#6e9576]">
                     Current Step
@@ -98,13 +92,6 @@ export default function JobDetailsPage() {
                   </h2>
                   <p className="mt-3 text-sm leading-7 text-[#587160]">
                     {statusCopy.body}
-                  </p>
-                </div>
-
-                <div className="rounded-2xl border border-[#d7e8d2] bg-[#f5fbf2] px-4 py-3 text-sm text-[#45624d]">
-                  <p className="font-semibold text-[#274232]">Results page</p>
-                  <p className="mt-1 leading-6">
-                    The dedicated results view stays separate from this monitor and unlocks once the full pipeline, including issue analysis, completes.
                   </p>
                 </div>
               </div>
@@ -118,47 +105,12 @@ export default function JobDetailsPage() {
 
               {!canSeeResults && job?.status !== "failed" && (
                 <div className="mt-6 rounded-2xl border border-[#d8ead2] bg-[#f7fbf5] px-5 py-4 text-sm text-[#587160]">
-                  <p className="font-semibold text-[#294635]">Results unlock after the issue scan finishes</p>
+                  <p className="font-semibold text-[#294635]">Results unlock after processing finishes</p>
                   <p className="mt-1">
-                    This page is intentionally focused on live pipeline status. Once the final plot-hole pass finishes, the button above will take you to the tabbed results page.
+                    Once the final review completes, the button above will open the full results view.
                   </p>
                 </div>
               )}
-            </section>
-
-            <section className="rounded-[2rem] border border-[#c5dfbf] bg-[#f7fbf5] p-6 shadow-[0_18px_48px_-36px_rgba(50,93,60,0.28)] sm:p-8">
-              <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
-                <div className="max-w-xl">
-                  <p className="text-xs font-semibold uppercase tracking-[0.28em] text-[#6e9576]">
-                    What ships in this branch
-                  </p>
-                  <h2 className="mt-3 text-xl font-bold text-[#234231]">
-                    Full review pipeline
-                  </h2>
-                  <p className="mt-3 text-sm leading-7 text-[#587160]">
-                    This branch runs ingestion, timeline synthesis, and a final issue-analysis pass end to end so the user journey and stored results stay in sync.
-                  </p>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2 md:max-w-sm md:grid-cols-1">
-                  <div className="rounded-2xl border border-[#d6e8d0] bg-white px-4 py-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#6e9576]">
-                      Now
-                    </p>
-                    <p className="mt-2 text-sm text-[#355342]">
-                      Ingestion, timeline synthesis, and plot-hole analysis run end to end, and results are readable from a dedicated page.
-                    </p>
-                  </div>
-                  <div className="rounded-2xl border border-[#d6e8d0] bg-white px-4 py-4">
-                    <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#6e9576]">
-                      Issues tab
-                    </p>
-                    <p className="mt-2 text-sm text-[#355342]">
-                      The Issues tab now fills from persisted plot-hole findings instead of a placeholder state.
-                    </p>
-                  </div>
-                </div>
-              </div>
             </section>
 
             {error && !job && (

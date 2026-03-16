@@ -103,12 +103,6 @@ export default function ResultsPage() {
             <h1 className="mt-2 text-3xl font-extrabold tracking-tight text-[#234231] sm:text-4xl">
               Timeline Review
             </h1>
-            <p className="mt-2 text-sm text-[#5a7a62]">
-              Job{" "}
-              <span className="font-mono font-semibold text-[#2b4a37]">
-                {jobId}
-              </span>
-            </p>
           </div>
 
           <div className="flex flex-wrap gap-3">
@@ -119,7 +113,7 @@ export default function ResultsPage() {
               to={`/graph/${jobId}`}
               className="inline-flex items-center justify-center rounded-xl border border-[#c9e0c3] bg-white/80 px-4 py-2.5 text-sm font-semibold text-[#355342] transition hover:bg-[#f4fbf1]"
             >
-              Back to Job Monitor
+              Back to Status
             </Link>
           </div>
         </div>

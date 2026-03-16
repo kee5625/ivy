@@ -24,7 +24,7 @@ def test_get_job_status_returns_current_status(monkeypatch) -> None:
     )
 
     with TestClient(create_app()) as client:
-        response = client.get("/jobs/job-123")
+        response = client.get("/api/jobs/job-123")
 
     assert response.status_code == 200
     assert response.json()["status"] == "plot_hole_complete"
@@ -45,7 +45,7 @@ def test_get_chapters_keeps_existing_client_shape(monkeypatch) -> None:
     )
 
     with TestClient(create_app()) as client:
-        response = client.get("/jobs/job-123/chapters")
+        response = client.get("/api/jobs/job-123/chapters")
 
     assert response.status_code == 200
     body = response.json()
@@ -77,7 +77,7 @@ def test_get_timeline_returns_ordered_events(monkeypatch) -> None:
     )
 
     with TestClient(create_app()) as client:
-        response = client.get("/jobs/job-123/timeline")
+        response = client.get("/api/jobs/job-123/timeline")
 
     assert response.status_code == 200
     body = response.json()
@@ -92,7 +92,7 @@ def test_get_plot_holes_returns_empty_list_when_none_exist(monkeypatch) -> None:
     )
 
     with TestClient(create_app()) as client:
-        response = client.get("/jobs/job-123/plot-holes")
+        response = client.get("/api/jobs/job-123/plot-holes")
 
     assert response.status_code == 200
     assert response.json() == {
@@ -119,7 +119,7 @@ def test_get_plot_holes_returns_stored_findings(monkeypatch) -> None:
     )
 
     with TestClient(create_app()) as client:
-        response = client.get("/jobs/job-123/plot-holes")
+        response = client.get("/api/jobs/job-123/plot-holes")
 
     assert response.status_code == 200
     assert response.json() == {

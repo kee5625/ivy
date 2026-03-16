@@ -9,15 +9,6 @@ type PipelinePanelProps = {
 
 type StepState = "completed" | "active" | "pending" | "unavailable";
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 function getStepState(
   stepId: string,
   job: Job | null,
@@ -229,41 +220,6 @@ export const PipelinePanel: React.FC<PipelinePanelProps> = ({
           );
         })}
       </div>
-
-      {job && (
-        <div className="mt-1 space-y-2 rounded-xl border border-[#d4e8ce] bg-[#f4fbf1] px-4 py-3">
-          <h3 className="mb-2 text-xs font-bold uppercase tracking-widest text-[#4f8957]">
-            Job Details
-          </h3>
-          <dl className="space-y-1.5">
-            <div className="flex items-start justify-between gap-2">
-              <dt className="shrink-0 text-xs text-[#7a9e82]">Job ID</dt>
-              <dd
-                className="max-w-35 truncate text-xs font-medium text-[#2b4a37]"
-                title={job.job_id}
-              >
-                {job.job_id}
-              </dd>
-            </div>
-            {job.created_at && (
-              <div className="flex items-start justify-between gap-2">
-                <dt className="shrink-0 text-xs text-[#7a9e82]">Started</dt>
-                <dd className="text-xs font-medium text-[#2b4a37]">
-                  {formatDate(job.created_at)}
-                </dd>
-              </div>
-            )}
-            {job.updated_at && (
-              <div className="flex items-start justify-between gap-2">
-                <dt className="shrink-0 text-xs text-[#7a9e82]">Updated</dt>
-                <dd className="text-xs font-medium text-[#2b4a37]">
-                  {formatDate(job.updated_at)}
-                </dd>
-              </div>
-            )}
-          </dl>
-        </div>
-      )}
     </div>
   );
 };

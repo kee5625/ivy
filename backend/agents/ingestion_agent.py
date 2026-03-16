@@ -45,8 +45,8 @@ class IngestionAgent:
     async def run(self, blob_name: str) -> str:
         if self.openai is None:
             raise RuntimeError(
-                "OpenAI client is not configured. "
-                "Set OPENAI_API_KEY in your .env file."
+                "Azure AI Foundry client is not configured. "
+                "Set PROJECT_KEY and OPENAI_ENDPOINT (or PROJECT_ENDPOINT)."
             )
         update_job_status(
             self.job_id,
