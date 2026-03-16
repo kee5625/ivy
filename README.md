@@ -1,6 +1,48 @@
 # Ivy
 
-Ivy is an Azure-backed story-analysis app that ingests a PDF manuscript, extracts chapter summaries and entities, merges a global timeline, and surfaces plot holes through a React frontend and a FastAPI backend.
+Ivy is an Azure-backed story-analysis assistant for authors. It ingests a manuscript PDF, extracts chapter summaries and characters, builds a global timeline, and flags plot holes or inconsistencies before they slow a book down.
+
+## Project Description
+
+Writing a book often takes far longer than it should because authors have to constantly re-check their own continuity. Character details drift, timelines stop lining up, setups are forgotten, and plot holes appear across chapters that were written weeks or months apart. Ivy is built to reduce that friction. It acts like a narrative QA layer for long-form fiction so authors can catch inconsistencies earlier, spend less time manually cross-referencing chapters, and move from draft to finished manuscript faster.
+
+### Problem It Solves
+
+Authors and story teams lose time on:
+
+- plot holes that only become obvious after many chapters
+- character, location, and event inconsistencies across drafts
+- broken chronology when scenes are reordered or revised
+- slow manual review loops before a manuscript is ready to ship
+
+Ivy helps accelerate the writing and editing process by turning a manuscript into structured story data, then using AI to surface risks that would otherwise take hours of rereading to find.
+
+### Features and Functionality
+
+- PDF manuscript upload and job tracking
+- chapter-by-chapter ingestion and structured extraction
+- timeline generation from local chapter events into a single story chronology
+- plot-hole detection over the generated story state
+- frontend views for job progress, chapters, timeline output, and findings
+- production-aware health and readiness endpoints for deployment
+
+### Technologies Used
+
+- FastAPI backend for API endpoints and in-process pipeline orchestration
+- React + Vite frontend for upload, monitoring, and results visualization
+- Azure AI Foundry for OpenAI-compatible model access
+- Azure Container Apps for backend hosting
+- Azure Static Web Apps for frontend hosting
+- Azure Blob Storage for manuscript file storage
+- Azure Cosmos DB for jobs, chapters, entities, timeline events, and findings
+- Microsoft Agent Framework as a future orchestration path
+- Azure MCP and GitHub Copilot as developer and demo accelerators
+
+## Architecture Diagram
+
+![Ivy architecture flow](docs/architecture-diagram.svg)
+
+This diagram keeps the system intentionally simple: the frontend sends manuscripts into the FastAPI backend, the backend coordinates the agents, Azure services store the data and power the reasoning, and Agent Framework / Azure MCP / GitHub Copilot show the natural next layer for orchestration and developer productivity.
 
 ## Architecture Summary
 
@@ -9,7 +51,7 @@ Ivy uses a simple two-tier architecture that works well for a hackathon demo and
 ## Repo Layout
 
 - `backend` - FastAPI API, agents, Azure integrations, tests
-- `ivy-client` - React + Vite frontend
+- `ivy-client` - frontend
 - `docs/azure-deployment.md` - Azure deployment and production-readiness guide
 
 ## Local Setup
@@ -47,7 +89,7 @@ npm install
 npm run dev
 ```
 
-The Vite dev server is already aligned with the backend `/api/*` route shape from Batch 2.
+The Vite dev server is already aligned with the backend `/api/*` route shape.
 
 ## Azure AI Foundry Setup
 
@@ -98,6 +140,8 @@ Detailed steps live in [`docs/azure-deployment.md`](docs/azure-deployment.md).
 - Azure Container Apps hosts the FastAPI backend and background pipeline execution.
 - Azure Static Web Apps hosts the frontend and proxies `/api/*` to the backend.
 - Azure Container Registry stores the backend image used by Container Apps.
+- Azure Monitor and Log Analytics strengthen the production story for operations and demos.
+- Azure Key Vault and Managed Identity strengthen secret handling and deployment credibility.
 
 ## Where Azure Can Be Used Next
 
@@ -109,4 +153,4 @@ Detailed steps live in [`docs/azure-deployment.md`](docs/azure-deployment.md).
 
 ## Submission-Ready Summary
 
-Ivy is a story-intelligence pipeline built on Azure. A user uploads a manuscript PDF, the FastAPI backend stores it in Blob Storage, tracks pipeline state in Cosmos DB, and uses Azure AI Foundry models to extract chapter-level structure, merge a global narrative timeline, and identify plot holes. The app is deployed as a React frontend on Static Web Apps and a Python backend on Azure Container Apps, which makes the project easy to demo while still showing a credible path to production hardening through Key Vault, managed identity, health probes, and Azure Monitor.
+Ivy is a story-intelligence pipeline built on Azure to help authors finish books faster. A user uploads a manuscript PDF, the FastAPI backend stores it in Blob Storage, tracks pipeline state in Cosmos DB, and uses Azure AI Foundry models to extract chapter-level structure, merge a global narrative timeline, and identify plot holes. The app is deployed as a React frontend on Static Web Apps and a Python backend on Azure Container Apps, which makes the project easy to demo while still showing a credible path to production hardening through Key Vault, managed identity, health probes, and Azure Monitor.
