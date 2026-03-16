@@ -10,10 +10,9 @@ DEMO: https://youtu.be/ekUmYZkNP70
 
 - **Kee5625** (Backend & Cloud Architecture)
   - GitHub: [kee5625](https://github.com/kee5625)
-  - Microsoft Learn: []
+  - Microsoft Innovative Studio: [Karthik Rachamolla]
 - **Sharvan R** (Frontend Development)
   - GitHub: [@sharvanr](https://github.com/sharvanr)
-  - Microsoft Learn: [sharvanr]
 
 ---
 

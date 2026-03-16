@@ -1,121 +1,116 @@
 <svg width="1400" height="860" viewBox="0 0 1400 860" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1400" y2="860" gradientUnits="userSpaceOnUse">
+    <linearGradient id="bg" x1="0" y1="0" x2="1400" y2="860">
       <stop stop-color="#F6FAFF"/>
       <stop offset="1" stop-color="#EEF4FF"/>
     </linearGradient>
+
     <linearGradient id="panel" x1="0" y1="0" x2="1" y2="1">
       <stop stop-color="#FFFFFF"/>
       <stop offset="1" stop-color="#F8FBFF"/>
     </linearGradient>
-    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
-      <path d="M0 0L12 6L0 12V0Z" fill="#4A6FA5"/>
+
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0 0L10 5L0 10Z" fill="#4A6FA5"/>
     </marker>
+
     <style>
-      .title { font: 700 30px 'Segoe UI', Arial, sans-serif; fill: #153E75; }
-      .subtitle { font: 500 15px 'Segoe UI', Arial, sans-serif; fill: #4A5568; }
-      .box-title { font: 700 22px 'Segoe UI', Arial, sans-serif; fill: #17324D; }
-      .box-body { font: 500 15px 'Segoe UI', Arial, sans-serif; fill: #49617A; }
-      .small { font: 600 13px 'Segoe UI', Arial, sans-serif; fill: #5A6D80; }
-      .azure { fill: #0078D4; }
-      .border { stroke: #C9D9EE; stroke-width: 2; }
-      .arrow { stroke: #4A6FA5; stroke-width: 4; stroke-linecap: round; marker-end: url(#arrow); }
-      .arrow-soft { stroke: #7A96BD; stroke-width: 3.5; stroke-linecap: round; marker-end: url(#arrow); stroke-dasharray: 10 10; }
+      .title { font:700 30px 'Segoe UI',Arial; fill:#153E75; }
+      .subtitle { font:500 15px 'Segoe UI',Arial; fill:#4A5568; }
+      .box-title { font:700 22px 'Segoe UI',Arial; fill:#17324D; }
+      .box-body { font:500 15px 'Segoe UI',Arial; fill:#49617A; }
+      .small { font:600 13px 'Segoe UI',Arial; fill:#5A6D80; }
+
+      .border { stroke:#C9D9EE; stroke-width:2; }
+
+      .arrow {
+        stroke:#4A6FA5;
+        stroke-width:2.5;
+        stroke-linecap:round;
+        marker-end:url(#arrow);
+      }
+
+      .arrow-soft {
+        stroke:#7A96BD;
+        stroke-width:2;
+        stroke-linecap:round;
+        stroke-dasharray:8 8;
+        marker-end:url(#arrow);
+      }
     </style>
   </defs>
 
   <rect width="1400" height="860" rx="28" fill="url(#bg)"/>
 
   <text x="72" y="78" class="title">Ivy Architecture</text>
-  <text x="72" y="108" class="subtitle">Simple flow diagram showing how authors upload a manuscript, how Ivy analyzes it, and where Azure and Microsoft tools fit in.</text>
+  <text x="72" y="108" class="subtitle">
+    Simple flow diagram showing how authors upload a manuscript and how Ivy analyzes it.
+  </text>
 
+  <!-- Author -->
   <rect x="72" y="160" width="240" height="130" rx="24" fill="url(#panel)" class="border"/>
   <text x="104" y="214" class="box-title">Author</text>
   <text x="104" y="246" class="box-body">Uploads manuscript PDF</text>
-  <text x="104" y="270" class="box-body">Wants faster editing,</text>
-  <text x="104" y="292" class="box-body">fewer plot holes, cleaner drafts</text>
+  <text x="104" y="270" class="box-body">Wants faster editing</text>
+  <text x="104" y="292" class="box-body">fewer plot holes</text>
 
+  <!-- Frontend -->
   <rect x="378" y="130" width="280" height="170" rx="26" fill="url(#panel)" class="border"/>
-  <g transform="translate(404 156)">
-    <polygon points="0,26 18,0 42,54 28,54 18,32 8,54 -6,54" class="azure"/>
-    <text x="58" y="34" class="small">Azure</text>
-  </g>
   <text x="408" y="218" class="box-title">Frontend</text>
   <text x="408" y="248" class="box-body">React + Vite UI</text>
-  <text x="408" y="272" class="box-body">Hosted on Azure Static Web Apps</text>
+  <text x="408" y="272" class="box-body">Static web hosting</text>
 
+  <!-- Backend -->
   <rect x="724" y="112" width="354" height="206" rx="28" fill="url(#panel)" class="border"/>
-  <g transform="translate(750 138)">
-    <polygon points="0,26 18,0 42,54 28,54 18,32 8,54 -6,54" class="azure"/>
-    <text x="58" y="34" class="small">Azure</text>
-  </g>
   <text x="754" y="200" class="box-title">Backend + Agents</text>
-  <text x="754" y="232" class="box-body">FastAPI on Azure Container Apps</text>
-  <text x="754" y="262" class="box-body">Ingestion Agent -&gt; Timeline Agent -&gt; Plot-Hole Agent</text>
-  <text x="754" y="290" class="box-body">Job tracking, orchestration, health/readiness</text>
+  <text x="754" y="232" class="box-body">FastAPI service</text>
+  <text x="754" y="262" class="box-body">Ingestion → Timeline → Plot-Hole Agents</text>
+  <text x="754" y="290" class="box-body">Job orchestration</text>
 
+  <!-- AI Models -->
   <rect x="1134" y="130" width="194" height="170" rx="26" fill="url(#panel)" class="border"/>
-  <g transform="translate(1160 156)">
-    <polygon points="0,26 18,0 42,54 28,54 18,32 8,54 -6,54" class="azure"/>
-    <text x="58" y="34" class="small">Azure</text>
-  </g>
-  <text x="1160" y="218" class="box-title">Azure AI Foundry</text>
-  <text x="1160" y="246" class="box-body">OpenAI-compatible models</text>
-  <text x="1160" y="270" class="box-body">Extraction, merge,</text>
-  <text x="1160" y="292" class="box-body">and reasoning</text>
+  <text x="1160" y="218" class="box-title">AI Models</text>
+  <text x="1160" y="246" class="box-body">Extraction</text>
+  <text x="1160" y="270" class="box-body">Merge</text>
+  <text x="1160" y="292" class="box-body">Reasoning</text>
 
+  <!-- Blob Storage -->
   <rect x="724" y="396" width="270" height="154" rx="26" fill="url(#panel)" class="border"/>
-  <g transform="translate(750 422)">
-    <polygon points="0,26 18,0 42,54 28,54 18,32 8,54 -6,54" class="azure"/>
-    <text x="58" y="34" class="small">Azure</text>
-  </g>
   <text x="754" y="486" class="box-title">Blob Storage</text>
-  <text x="754" y="516" class="box-body">Stores uploaded manuscript PDFs</text>
+  <text x="754" y="516" class="box-body">Stores manuscript PDFs</text>
 
+  <!-- Cosmos DB -->
   <rect x="1030" y="396" width="298" height="154" rx="26" fill="url(#panel)" class="border"/>
-  <g transform="translate(1056 422)">
-    <polygon points="0,26 18,0 42,54 28,54 18,32 8,54 -6,54" class="azure"/>
-    <text x="58" y="34" class="small">Azure</text>
-  </g>
-  <text x="1060" y="486" class="box-title">Cosmos DB</text>
-  <text x="1060" y="516" class="box-body">Stores jobs, chapters, timeline events,</text>
-  <text x="1060" y="538" class="box-body">entities, and plot-hole findings</text>
+  <text x="1060" y="486" class="box-title">Database</text>
+  <text x="1060" y="516" class="box-body">Jobs, chapters, events</text>
+  <text x="1060" y="538" class="box-body">entities, findings</text>
 
+  <!-- Bottom panels -->
   <rect x="72" y="620" width="400" height="170" rx="28" fill="url(#panel)" class="border"/>
   <text x="104" y="674" class="box-title">Why Ivy matters</text>
-  <text x="104" y="706" class="box-body">Authors lose time to plot holes, timeline drift,</text>
-  <text x="104" y="730" class="box-body">and continuity mistakes across long drafts.</text>
-  <text x="104" y="754" class="box-body">Ivy turns that manual review loop into a faster</text>
-  <text x="104" y="778" class="box-body">AI-assisted editing workflow.</text>
+  <text x="104" y="706" class="box-body">Authors lose time to plot holes</text>
+  <text x="104" y="730" class="box-body">timeline drift</text>
+  <text x="104" y="754" class="box-body">continuity mistakes</text>
 
   <rect x="528" y="620" width="352" height="170" rx="28" fill="url(#panel)" class="border"/>
-  <g transform="translate(554 646)">
-    <polygon points="0,26 18,0 42,54 28,54 18,32 8,54 -6,54" class="azure"/>
-    <text x="58" y="34" class="small">Azure MCP</text>
-  </g>
-  <text x="558" y="708" class="box-title">Developer + Demo Workflow</text>
-  <text x="558" y="738" class="box-body">Azure MCP for Azure-aware tooling</text>
-  <text x="558" y="762" class="box-body">GitHub Copilot for faster iteration</text>
+  <text x="558" y="708" class="box-title">Developer Workflow</text>
+  <text x="558" y="738" class="box-body">AI-assisted development</text>
+  <text x="558" y="762" class="box-body">fast iteration</text>
 
   <rect x="936" y="620" width="392" height="170" rx="28" fill="url(#panel)" class="border"/>
-  <g transform="translate(962 646)">
-    <polygon points="0,26 18,0 42,54 28,54 18,32 8,54 -6,54" class="azure"/>
-    <text x="58" y="34" class="small">Microsoft Agent Framework</text>
-  </g>
-  <text x="966" y="708" class="box-title">Future Orchestration Layer</text>
-  <text x="966" y="738" class="box-body">Formal multi-agent coordination, handoffs,</text>
-  <text x="966" y="762" class="box-body">and richer narrative workflow control</text>
+  <text x="966" y="708" class="box-title">Future Agent Orchestration</text>
+  <text x="966" y="738" class="box-body">Multi-agent coordination</text>
+  <text x="966" y="762" class="box-body">workflow control</text>
 
-  <path d="M312 225H378" class="arrow"/>
-  <path d="M658 215H724" class="arrow"/>
-  <path d="M1078 215H1134" class="arrow"/>
-  <path d="M900 318V396" class="arrow"/>
-  <path d="M970 318L1088 396" class="arrow"/>
-  <path d="M1228 300V396" class="arrow"/>
-  <path d="M804 550L704 620" class="arrow-soft"/>
-  <path d="M1178 550V620" class="arrow-soft"/>
+  <!-- Arrows (rerouted & smaller) -->
+  <path d="M312 220 L360 220" class="arrow"/>
+  <path d="M658 220 L710 220" class="arrow"/>
+  <path d="M1078 220 L1124 220" class="arrow"/>
 
-  <text x="846" y="360" class="small">manuscript processing + agent orchestration</text>
-  <text x="1132" y="360" class="small">model calls</text>
-  <text x="1080" y="382" class="small">story state</text>
+  <path d="M880 318 L880 370" class="arrow"/>
+  <path d="M980 318 L1080 370" class="arrow"/>
+
+  <path d="M900 550 L760 620" class="arrow-soft"/>
+  <path d="M1180 550 L1180 620" class="arrow-soft"/>
+
 </svg>
