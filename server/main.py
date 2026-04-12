@@ -63,3 +63,9 @@ def call_llm(messages: list[BaseMessage]):
         + messages
     )
 
+@tool
+def call_tool(tool_call: ToolCall):
+    """Performs the tool call"""
+    tool = tools_by_name[tool_call("name")]
+    return tool.invoke(tool_call)
+    
