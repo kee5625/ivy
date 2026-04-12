@@ -50,3 +50,16 @@ from langgraph.messages import (
 )
 from langchain_core.messages import BaseMessage
 from langgraph.func import entrypoint, task
+
+@task
+def call_llm(messages: list[BaseMessage]):
+    """LLM decides whether to call a tool or not"""
+    return model_with_tools.invoke(
+        [
+            SystemMessage(
+                content="You are a helpful assistant tasked with performing arithmetic on a set of inputs."
+            )
+        ]
+        + messages
+    )
+
