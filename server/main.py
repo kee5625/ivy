@@ -68,4 +68,28 @@ def call_tool(tool_call: ToolCall):
     """Performs the tool call"""
     tool = tools_by_name[tool_call("name")]
     return tool.invoke(tool_call)
+
+@entrypoint()
+def agent(messages: list[BaseMessage]):
+    model_response = call_llm(messages).result()
     
+    while True:
+        if not model_response.tool_calls:
+            break
+        
+        # Execute tools 
+        tool_result_futures = [
+            call_tool(tool_call) for tool_call in model_response.tool_calls
+        ]
+        tool_results = [fut.result() for fut in tool_result_futures]
+        messages = add_messages(messages, [model_response, *tool_results])
+        model_response = call_llm(messages).result()
+    
+    messages = add_messages(messages, model_response)
+    return messages
+    
+# invoke
+messages = [HumanMessage(content="Add 3 and 4.")]
+for chunk in agent.stream(messages, stream_mode="updates"):
+    print(chunk)
+    print("\n")
