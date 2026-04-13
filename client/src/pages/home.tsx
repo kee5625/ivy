@@ -1,6 +1,11 @@
 import { useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+type SignUploadResponse = {
+  uploadUrl: string;
+  objectKey: string;
+};
+
 export default function Home() {
   const navigate = useNavigate();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -22,41 +27,44 @@ export default function Home() {
       return;
     }
 
-    // Hard guard: if a request is already in flight (e.g. double-click or
-    // label/input double-fire), bail out immediately without sending a second
-    // HTTP request — which would cause an ECONNRESET on the backend.
     if (inflightRef.current) return;
     inflightRef.current = true;
 
-    const formData = new FormData();
-    formData.append("file", selectedFile);
-
     try {
       setIsUploading(true);
-
-      const response = await fetch("/api/pdf/upload", {
+      const signResponse = await fetch("/api/upload", {
         method: "POST",
-        body: formData,
         headers: {
-          // Tell the server we won't reuse this connection, preventing uvicorn
-          // from receiving a pipelined second request and resetting mid-read.
-          Connection: "close",
+          "Content-Type": "application/json",
         },
+        body: JSON.stringify({
+          filename: selectedFile.name,
+          contentType: selectedFile.type || "application/pdf",
+          size: selectedFile.size,
+        }),
       });
 
-      if (!response.ok) {
-        throw new Error(`Upload failed with status ${response.status}`);
+      if (!signResponse.ok) {
+        throw new Error(`Failed to sign upload (${signResponse.status})`);
       }
 
-      const data: { job_id?: string } = await response.json();
-      const jobId = data?.job_id ?? selectedFile.name;
+      const signData = (await signResponse.json()) as SignUploadResponse;
 
-      // Navigate to the graph page with the job ID
-      navigate(`/graph/${jobId}`);
+      const uploadResponse = await fetch(signData.uploadUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": selectedFile.type || "application/pdf",
+        },
+        body: selectedFile,
+      });
+
+      if (!uploadResponse.ok) {
+        throw new Error(`Direct upload failed (${uploadResponse.status})`);
+      }
+
+      navigate(`/graph/${encodeURIComponent(signData.objectKey)}`);
     } catch {
       alert("Failed to upload file.");
-      // Only release the guard on failure so the user can retry.
-      // On success we navigate away, so the component unmounts anyway.
       inflightRef.current = false;
     } finally {
       setIsUploading(false);
