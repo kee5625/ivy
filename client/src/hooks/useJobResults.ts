@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
 
 import type { Chapter, Job, PlotHole, TimelineEvent } from "@/types/graph";
 
@@ -11,6 +10,32 @@ type UseJobResultsResult = {
   isLoading: boolean;
   error: string | null;
 };
+
+async function fetchJson<T>(url: string): Promise<T> {
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    let message = "Failed to load job results";
+
+    try {
+      const errorData = await response.json();
+      if (
+        errorData &&
+        typeof errorData === "object" &&
+        "detail" in errorData &&
+        typeof (errorData as { detail?: unknown }).detail === "string"
+      ) {
+        message = (errorData as { detail: string }).detail;
+      }
+    } catch {
+      // Ignore JSON parse issues and keep fallback message.
+    }
+
+    throw new Error(message);
+  }
+
+  return (await response.json()) as T;
+}
 
 export function useJobResults(jobId: string): UseJobResultsResult {
   const [job, setJob] = useState<Job | null>(null);
@@ -27,29 +52,34 @@ export function useJobResults(jobId: string): UseJobResultsResult {
       setIsLoading(true);
 
       try {
-        const [jobResponse, chaptersResponse, timelineResponse, plotHoleResponse] =
-          await Promise.all([
-            axios.get<Job>(`/api/jobs/${jobId}`),
-            axios.get<{ chapters: Chapter[] }>(`/api/jobs/${jobId}/chapters`),
-            axios.get<{ timeline_events: TimelineEvent[] }>(
-              `/api/jobs/${jobId}/timeline`
-            ),
-            axios.get<{ plot_holes: PlotHole[] }>(`/api/jobs/${jobId}/plot-holes`),
-          ]);
+        const [
+          jobResponse,
+          chaptersResponse,
+          timelineResponse,
+          plotHoleResponse,
+        ] = await Promise.all([
+          fetchJson<Job>(`/api/jobs/${jobId}`),
+          fetchJson<{ chapters: Chapter[] }>(`/api/jobs/${jobId}/chapters`),
+          fetchJson<{ timeline_events: TimelineEvent[] }>(
+            `/api/jobs/${jobId}/timeline`,
+          ),
+          fetchJson<{ plot_holes: PlotHole[] }>(
+            `/api/jobs/${jobId}/plot-holes`,
+          ),
+        ]);
 
         if (!active) return;
 
-        setJob(jobResponse.data);
-        setChapters(chaptersResponse.data.chapters ?? []);
-        setTimelineEvents(timelineResponse.data.timeline_events ?? []);
-        setPlotHoles(plotHoleResponse.data.plot_holes ?? []);
+        setJob(jobResponse);
+        setChapters(chaptersResponse.chapters ?? []);
+        setTimelineEvents(timelineResponse.timeline_events ?? []);
+        setPlotHoles(plotHoleResponse.plot_holes ?? []);
         setError(null);
       } catch (err) {
         if (!active) return;
 
-        const message = axios.isAxiosError(err)
-          ? (err.response?.data?.detail ?? err.message)
-          : "Failed to load job results";
+        const message =
+          err instanceof Error ? err.message : "Failed to load job results";
 
         setError(message);
       } finally {

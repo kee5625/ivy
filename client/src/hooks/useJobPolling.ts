@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import axios from "axios";
 
 import { isTerminalJobStatus, type Job } from "@/types/graph";
 
@@ -11,6 +10,24 @@ type UseJobPollingResult = {
   error: string | null;
 };
 
+async function parseErrorMessage(
+  response: Response,
+  fallbackMessage: string,
+): Promise<string> {
+  try {
+    const contentType = response.headers.get("content-type") ?? "";
+    if (contentType.includes("application/json")) {
+      const body = (await response.json()) as { detail?: string };
+      return body.detail ?? fallbackMessage;
+    }
+
+    const text = await response.text();
+    return text || fallbackMessage;
+  } catch {
+    return fallbackMessage;
+  }
+}
+
 export function useJobPolling(jobId: string): UseJobPollingResult {
   const [job, setJob] = useState<Job | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -21,7 +38,17 @@ export function useJobPolling(jobId: string): UseJobPollingResult {
 
   const fetchJob = useCallback(async () => {
     try {
-      const { data } = await axios.get<Job>(`/api/jobs/${jobId}`);
+      const response = await fetch(`/api/jobs/${jobId}`);
+
+      if (!response.ok) {
+        const message = await parseErrorMessage(
+          response,
+          "Failed to fetch job status",
+        );
+        throw new Error(message);
+      }
+
+      const data = (await response.json()) as Job;
       if (!isMountedRef.current) return;
 
       setJob(data);
@@ -33,9 +60,8 @@ export function useJobPolling(jobId: string): UseJobPollingResult {
     } catch (err) {
       if (!isMountedRef.current) return;
 
-      const message = axios.isAxiosError(err)
-        ? (err.response?.data?.detail ?? err.message)
-        : "Failed to fetch job status";
+      const message =
+        err instanceof Error ? err.message : "Failed to fetch job status";
 
       setError(message);
       timerRef.current = setTimeout(fetchJob, JOB_POLL_INTERVAL);

@@ -1,6 +1,5 @@
 import { useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
 
 export default function Home() {
   const navigate = useNavigate();
@@ -34,16 +33,27 @@ export default function Home() {
 
     try {
       setIsUploading(true);
-      const response = await axios.post("/api/pdf/upload", formData, {
-        // Tell the server we won't reuse this connection, preventing uvicorn
-        // from receiving a pipelined second request and resetting mid-read.
-        headers: { Connection: "close" },
+
+      const response = await fetch("/api/pdf/upload", {
+        method: "POST",
+        body: formData,
+        headers: {
+          // Tell the server we won't reuse this connection, preventing uvicorn
+          // from receiving a pipelined second request and resetting mid-read.
+          Connection: "close",
+        },
       });
-      const jobId = response.data?.job_id ?? selectedFile.name;
+
+      if (!response.ok) {
+        throw new Error(`Upload failed with status ${response.status}`);
+      }
+
+      const data: { job_id?: string } = await response.json();
+      const jobId = data?.job_id ?? selectedFile.name;
 
       // Navigate to the graph page with the job ID
       navigate(`/graph/${jobId}`);
-    } catch (e) {
+    } catch {
       alert("Failed to upload file.");
       // Only release the guard on failure so the user can retry.
       // On success we navigate away, so the component unmounts anyway.
