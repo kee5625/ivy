@@ -1,95 +1,16 @@
-from langchain.tools import tool
-from langchain.chat_models import init_chat_model
+import uvicorn
+from fastapi import FastAPI
+from api import router
 
-model = init_chat_model(
-    "claude-sonnet-4-6",
-    temperature=0
-)
 
-# define tools
-@tool
-def multiply(a: int, b: int) -> int:
-    """Multiply `a` and `b`.
-    
-    Args:
-        a: First int
-        b: Second int
-    """
-    return a * b
+def create_app() -> FastAPI:
+    app = FastAPI(title="ivy")
+    app.include_router(router)
+    return app
 
-@tool
-def add(a: int, b: int) -> int:
-    """Adds `a` and `b`.
 
-    Args:
-        a: First int
-        b: Second int
-    """
-    return a + b
+app = create_app()
 
-@tool
-def divide(a: int, b: int) -> float:
-    """Divide `a` and `b`.
 
-    Args:
-        a: First int
-        b: Second int
-    """
-    return a / b
-    
-# Augment the LLM with tools
-tools = [add, multiply, divide]
-tools_by_name = {tool.name: tool for tool in tools}
-model_with_tools = model.bind_tools(tools)
-
-from langgraph.graph import add_messages
-from langgraph.messages import (
-    SystemMessage,
-    HumanMessage,
-    ToolCall,
-)
-from langchain_core.messages import BaseMessage
-from langgraph.func import entrypoint, task
-
-@task
-def call_llm(messages: list[BaseMessage]):
-    """LLM decides whether to call a tool or not"""
-    return model_with_tools.invoke(
-        [
-            SystemMessage(
-                content="You are a helpful assistant tasked with performing arithmetic on a set of inputs."
-            )
-        ]
-        + messages
-    )
-
-@tool
-def call_tool(tool_call: ToolCall):
-    """Performs the tool call"""
-    tool = tools_by_name[tool_call("name")]
-    return tool.invoke(tool_call)
-
-@entrypoint()
-def agent(messages: list[BaseMessage]):
-    model_response = call_llm(messages).result()
-    
-    while True:
-        if not model_response.tool_calls:
-            break
-        
-        # Execute tools 
-        tool_result_futures = [
-            call_tool(tool_call) for tool_call in model_response.tool_calls
-        ]
-        tool_results = [fut.result() for fut in tool_result_futures]
-        messages = add_messages(messages, [model_response, *tool_results])
-        model_response = call_llm(messages).result()
-    
-    messages = add_messages(messages, model_response)
-    return messages
-    
-# invoke
-messages = [HumanMessage(content="Add 3 and 4.")]
-for chunk in agent.stream(messages, stream_mode="updates"):
-    print(chunk)
-    print("\n")
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
