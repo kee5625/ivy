@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { requestUploadSignature, uploadFileToSignedUrl } from "@/api/upload";
+import { uploadPdfDirectToR2 } from "@/api/upload";
 
 export default function Home() {
   const navigate = useNavigate();
@@ -28,19 +28,8 @@ export default function Home() {
 
     try {
       setIsUploading(true);
-      const signData = await requestUploadSignature({
-        filename: selectedFile.name,
-        contentType: selectedFile.type || "application/pdf",
-        size: selectedFile.size,
-      });
-
-      await uploadFileToSignedUrl(
-        signData.uploadUrl,
-        selectedFile,
-        signData.headers,
-      );
-
-      navigate(`/graph/${encodeURIComponent(signData.objectKey)}`);
+      const upload = await uploadPdfDirectToR2(selectedFile);
+      navigate(`/graph/${encodeURIComponent(upload.objectKey)}`);
     } catch {
       alert("Failed to upload file.");
       inflightRef.current = false;
