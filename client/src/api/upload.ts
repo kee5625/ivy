@@ -5,6 +5,15 @@ type DirectUploadResult = {
   objectUrl: string | null;
 };
 
+function logUpload(event: string, data?: Record<string, unknown>): void {
+  if (data) {
+    console.info(`[upload] ${event}`, data);
+    return;
+  }
+
+  console.info(`[upload] ${event}`);
+}
+
 function assertEnv(name: string): string {
   const value = import.meta.env[name as keyof ImportMetaEnv];
 
@@ -71,23 +80,45 @@ function toObjectUrl(objectKey: string): string | null {
 }
 
 export async function uploadPdfDirectToR2(file: File): Promise<DirectUploadResult> {
+  logUpload("start", {
+    filename: file.name,
+    size: file.size,
+    contentType: file.type || "application/pdf",
+  });
+
   ensurePdfFile(file);
 
-  const bucketName = assertEnv("VITE_R2_BUCKET");
-  const objectKey = createObjectKey(file.name);
-  const client = createR2Client();
+  try {
+    const bucketName = assertEnv("VITE_R2_BUCKET");
+    const objectKey = createObjectKey(file.name);
+    const client = createR2Client();
 
-  await client.send(
-    new PutObjectCommand({
-      Bucket: bucketName,
-      Key: objectKey,
-      Body: file,
-      ContentType: file.type || "application/pdf",
-    }),
-  );
+    logUpload("put_object_request", {
+      bucket: bucketName,
+      objectKey,
+    });
 
-  return {
-    objectKey,
-    objectUrl: toObjectUrl(objectKey),
-  };
+    await client.send(
+      new PutObjectCommand({
+        Bucket: bucketName,
+        Key: objectKey,
+        Body: new Uint8Array(await file.arrayBuffer()),
+        ContentType: file.type || "application/pdf",
+        ContentLength: file.size,
+      }),
+    );
+
+    const result = {
+      objectKey,
+      objectUrl: toObjectUrl(objectKey),
+    };
+
+    logUpload("success", result);
+    return result;
+  } catch (error) {
+    logUpload("error", {
+      message: error instanceof Error ? error.message : "Unknown upload error",
+    });
+    throw error;
+  }
 }
