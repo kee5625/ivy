@@ -1,55 +1,59 @@
-import type { ExportedHandler } from "@cloudflare/workers-types";
-import { AwsClient } from "aws4fetch";
-
-interface Env {
-  R2_ACCESS_KEY_ID: string;
-  R2_SECRET_ACCESS_KEY: string;
-  R2_ACCOUNT_ID: string;
-  R2_BUCKET_NAME: string;
-}
-
-type SignBody = {
-  filename?: string;
-  contentType?: string;
+export type SignUploadRequest = {
+  filename: string;
+  contentType: string;
+  size: number;
 };
 
-export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
-    if (request.method !== "POST") {
-      return new Response("Method not allowed", { status: 405 });
-    }
+export type SignUploadResponse = {
+  uploadUrl: string;
+  objectKey: string;
+  headers?: Record<string, string>;
+};
 
-    const body = (await request.json().catch(() => ({}))) as SignBody;
-    const rawName = body.filename?.trim() || "upload.pdf";
-    const safeName = rawName.replace(/[^\w.\-]/g, "_");
-    const contentType = body.contentType || "application/pdf";
+function ensurePdfRequest(payload: SignUploadRequest): void {
+  const isPdfType = payload.contentType === "application/pdf";
+  const isPdfName = payload.filename.toLowerCase().endsWith(".pdf");
 
-    const objectKey = `uploads/${crypto.randomUUID()}-${safeName}`;
+  if (!isPdfType && !isPdfName) {
+    throw new Error("Only PDF uploads are supported");
+  }
+}
 
-    const r2 = new AwsClient({
-      accessKeyId: env.R2_ACCESS_KEY_ID,
-      secretAccessKey: env.R2_SECRET_ACCESS_KEY,
-    });
+export async function requestUploadSignature(
+  payload: SignUploadRequest,
+): Promise<SignUploadResponse> {
+  ensurePdfRequest(payload);
 
-    const url = new URL(
-      `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com/${env.R2_BUCKET_NAME}/${objectKey}`,
-    );
-    url.searchParams.set("X-Amz-Expires", "900");
+  const response = await fetch("/api/upload", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
 
-    const signed = await r2.sign(
-      new Request(url, {
-        method: "PUT",
-        headers: {
-          "Content-Type": contentType,
-        },
-      }),
-      { aws: { signQuery: true } },
-    );
+  if (!response.ok) {
+    throw new Error(`Failed to sign upload (${response.status})`);
+  }
 
-    return Response.json({
-      uploadUrl: signed.url,
-      objectKey,
-      expiresIn: 900,
-    });
-  },
-} satisfies ExportedHandler<Env>;
+  return (await response.json()) as SignUploadResponse;
+}
+
+export async function uploadFileToSignedUrl(
+  uploadUrl: string,
+  file: File,
+  headers?: Record<string, string>,
+): Promise<void> {
+  const uploadResponse = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: {
+      "Content-Type": file.type || "application/pdf",
+      ...headers,
+    },
+    body: file,
+  });
+
+  if (!uploadResponse.ok) {
+    throw new Error(`Direct upload failed (${uploadResponse.status})`);
+  }
+}

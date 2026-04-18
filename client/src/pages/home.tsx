@@ -1,10 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-
-type SignUploadResponse = {
-  uploadUrl: string;
-  objectKey: string;
-};
+import { requestUploadSignature, uploadFileToSignedUrl } from "@/api/upload";
 
 export default function Home() {
   const navigate = useNavigate();
@@ -32,35 +28,17 @@ export default function Home() {
 
     try {
       setIsUploading(true);
-      const signResponse = await fetch("/api/upload", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          filename: selectedFile.name,
-          contentType: selectedFile.type || "application/pdf",
-          size: selectedFile.size,
-        }),
+      const signData = await requestUploadSignature({
+        filename: selectedFile.name,
+        contentType: selectedFile.type || "application/pdf",
+        size: selectedFile.size,
       });
 
-      if (!signResponse.ok) {
-        throw new Error(`Failed to sign upload (${signResponse.status})`);
-      }
-
-      const signData = (await signResponse.json()) as SignUploadResponse;
-
-      const uploadResponse = await fetch(signData.uploadUrl, {
-        method: "PUT",
-        headers: {
-          "Content-Type": selectedFile.type || "application/pdf",
-        },
-        body: selectedFile,
-      });
-
-      if (!uploadResponse.ok) {
-        throw new Error(`Direct upload failed (${uploadResponse.status})`);
-      }
+      await uploadFileToSignedUrl(
+        signData.uploadUrl,
+        selectedFile,
+        signData.headers,
+      );
 
       navigate(`/graph/${encodeURIComponent(signData.objectKey)}`);
     } catch {
