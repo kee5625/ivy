@@ -1,5 +1,5 @@
 import os
-import typing
+from typing import Any
 
 from groq import Groq
 
@@ -56,3 +56,38 @@ def ingestion_chat_completion(chapter_chunk: dict) -> dict:
         "temporal_markers": extracted.get("temporal_markers", []),
         "raw_text": chunk["text"],
     }
+
+def plot_holes_chat_completion(
+    story_state: dict[str, Any],
+    attempt: int,
+) -> list[dict[str, Any]]:
+    
+    client = get_client()
+
+    prompt = (
+        "You are a conservative fiction continuity analyst.\n"
+        "Review the structured story state and return only high-signal plot holes that are directly supported by the provided evidence.\n\n"
+        "Allowed hole types:\n"
+        "- timeline_paradox: chronology or causality contradicts itself.\n"
+        "- location_conflict: the same person or event is placed in incompatible locations at the same time.\n"
+        "- dead_character_speaks: a character appears active after a supported death/absence contradiction.\n"
+        "- unresolved_setup: the story strongly sets up a concrete thread that remains unresolved by the end of the provided material.\n\n"
+        "Rules:\n"
+        "1) Be conservative. Return fewer findings rather than speculative ones.\n"
+        "2) Return zero findings if the evidence is ambiguous.\n"
+        "3) Use only the provided chapters, timeline events, and entities.\n"
+        "4) Keep descriptions concise and evidence-based. Mention the contradiction or unresolved setup explicitly.\n"
+        "5) `confidence` must reflect how explicit the support is, from 0.0 to 1.0.\n"
+        "6) Only use event ids and chapter numbers that exist in the input.\n\n"
+        f"Story state:\n{json.dumps(payload, ensure_ascii=False)}"
+    )
+    
+    response = client.chat.completions.create(
+        messages[
+            {
+                "role":"user",
+                "content": prompt,
+            }
+        ],
+        model = MODEL
+    )
