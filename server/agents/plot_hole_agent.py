@@ -4,6 +4,8 @@ from typing import Any
 
 from langgraph.func import entrypoint, task
 
+from utils.client import plot_holes_chat_completion
+
 
 @task
 def load_story_state(job_id: str) -> dict[str, Any]:
@@ -24,7 +26,12 @@ def request_plot_holes(
     model_name: str,
 ) -> list[dict[str, Any]]:
     """Request plot holes from LLM."""
-    pass
+    payload = build_prompt_payload(story_state)
+    return plot_holes_chat_completion(
+        story_state=payload,
+        attempt=attempt,
+        model_name=model_name,
+    )
 
 
 @task
