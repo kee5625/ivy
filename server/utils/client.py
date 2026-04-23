@@ -1,8 +1,12 @@
 import json
+import logging
 import os
+import time
 from typing import Any
 
 from groq import Groq
+
+logger = logging.getLogger(__name__)
 
 MODEL = "qwen/qwen3-32b"
 MAX_CHAPTER_CHARS = 15_000
@@ -112,3 +116,36 @@ def plot_holes_chat_completion(
         return []
 
     return [item for item in findings if isinstance(item, dict)]
+
+
+def timeline_chat_completion(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Call LLM for chapter timeline extraction. Returns raw event list."""
+    client = get_client()
+
+    prompt = (
+        "You are a narrative analyst working on one chapter only.\n"
+        "Using only the provided chapter data, produce a small ordered list of the most important events in this chapter.\n\n"
+        "Requirements:\n"
+        "1) Return at most 4 events.\n"
+        "2) Keep each event short, concrete, and chapter-local.\n"
+        "3) Preserve order within the chapter only.\n"
+        "4) Do not invent events unsupported by the chapter data.\n"
+        "5) `characters_present` should contain names/slugs only.\n"
+        "6) `time_reference` should be null unless the chapter data provides one.\n"
+        "7) `confidence` must be between 0.0 and 1.0.\n\n"
+        "Respond in JSON: {\"events\": [{\"description\": ..., \"characters_present\": [...], \"location\": ..., \"time_reference\": ..., \"confidence\": ...}]}\n\n"
+        f"Chapter data:\n{json.dumps(payload, ensure_ascii=False)}"
+    )
+
+    response = client.chat.completions.create(
+        messages=[{"role": "user", "content": prompt}],
+        model=MODEL,
+    )
+    raw_content = response.choices[0].message.content or "{}"
+    parsed = json.loads(raw_content)
+    raw_events = parsed.get("events", [])
+
+    if not isinstance(raw_events, list):
+        raise RuntimeError("Timeline output invalid: 'events' is not a list")
+
+    return raw_events
