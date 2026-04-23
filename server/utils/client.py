@@ -1,22 +1,25 @@
+import json
 import os
 from typing import Any
 
 from groq import Groq
 
-MODEL="qwen/qwen3-32b"
+MODEL = "qwen/qwen3-32b"
 MAX_CHAPTER_CHARS = 15_000
 MAX_RETRIES = 3
 RETRY_BASE_DELAY = 2.0
 
+
 def get_client() -> Groq:
     client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
-    
+
     return client
-    
-def ingestion_chat_completion(chapter_chunk: dict) -> dict:
+
+
+def ingestion_chat_completion(chapter_chunk: dict[str, Any]) -> dict[str, Any]:
     client = get_client()
-    chapter_text = chunk["text"][:MAX_CHAPTER_CHARS]
-    
+    chapter_text = str(chapter_chunk.get("text", ""))[:MAX_CHAPTER_CHARS]
+
     prompt = (
         "You are a literary analyst. Given the following chapter text, extract:\n"
         "1. A strict maximum of 3 short bullets for the summary.\n"
@@ -30,38 +33,40 @@ def ingestion_chat_completion(chapter_chunk: dict) -> dict:
         '  "characters": ["Name1", "Name2"],\n'
         '  "temporal_markers": ["1998", "the next day"]\n'
         "}\n\n"
-        f"Chapter: {chunk['chapter_title']}\n\n"
+        f"Chapter: {chapter_chunk.get('chapter_title', '')}\n\n"
         f"Text:\n{chapter_text}"
     )
-    
-    response = client.chat.completitions.create(
-        messages[
+
+    response = client.chat.completions.create(
+        messages=[
             {
-                "role":"user",
+                "role": "user",
                 "content": prompt,
             }
         ],
-        model = MODEL,
+        model=MODEL,
     )
-    
-    raw_content = response.choices[0].messages.content
+
+    raw_content = response.choices[0].message.content or "{}"
     extracted = json.loads(raw_content)
-    
+
     return {
-        "chapter_num": chunk["chapter_num"],
-        "chapter_title": chunk["chapter_title"],
+        "chapter_num": chapter_chunk.get("chapter_num"),
+        "chapter_title": chapter_chunk.get("chapter_title", ""),
         "summary": extracted.get("summary", []),
         "key_events": extracted.get("key_events", []),
         "characters": extracted.get("characters", []),
         "temporal_markers": extracted.get("temporal_markers", []),
-        "raw_text": chunk["text"],
+        "raw_text": chapter_chunk.get("text", ""),
     }
+
 
 def plot_holes_chat_completion(
     story_state: dict[str, Any],
     attempt: int,
+    model_name: str | None = None,
 ) -> list[dict[str, Any]]:
-    
+    _ = attempt
     client = get_client()
 
     prompt = (
@@ -79,15 +84,31 @@ def plot_holes_chat_completion(
         "4) Keep descriptions concise and evidence-based. Mention the contradiction or unresolved setup explicitly.\n"
         "5) `confidence` must reflect how explicit the support is, from 0.0 to 1.0.\n"
         "6) Only use event ids and chapter numbers that exist in the input.\n\n"
-        f"Story state:\n{json.dumps(payload, ensure_ascii=False)}"
+        f"Story state:\n{json.dumps(story_state, ensure_ascii=False)}"
     )
-    
+
     response = client.chat.completions.create(
-        messages[
+        messages=[
             {
-                "role":"user",
+                "role": "user",
                 "content": prompt,
             }
         ],
-        model = MODEL
+        model=model_name or MODEL,
     )
+
+    raw_content = response.choices[0].message.content or "{}"
+    parsed = json.loads(raw_content)
+
+    findings: Any
+    if isinstance(parsed, dict):
+        findings = parsed.get("findings", [])
+    elif isinstance(parsed, list):
+        findings = parsed
+    else:
+        findings = []
+
+    if not isinstance(findings, list):
+        return []
+
+    return [item for item in findings if isinstance(item, dict)]
