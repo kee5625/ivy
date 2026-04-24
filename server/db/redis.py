@@ -33,3 +33,17 @@ def get_redis() -> redis.Redis:
 
 def job_status_key(job_id: str) -> str:
     return f"job_status:{job_id}"
+
+
+def job_manifest_key(job_id: str) -> str:
+    return f"job_manifest:{job_id}"
+
+
+async def set_job_manifest(job_id: str, object_key: str) -> None:
+    client = get_redis()
+    await client.set(job_manifest_key(job_id), object_key, ex=JOB_TTL_SECONDS)
+
+
+async def get_job_manifest(job_id: str) -> str | None:
+    client = get_redis()
+    return await client.get(job_manifest_key(job_id))
