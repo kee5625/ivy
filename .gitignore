@@ -5,6 +5,8 @@ __pycache__
 *$py.class
 .venv
 venv/
+package-lock.json
+uv.lock
 
 # Build outputs
 /dist
