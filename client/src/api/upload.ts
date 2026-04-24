@@ -1,8 +1,10 @@
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+type PresignResponse = {
+  presigned_url: string;
+  object_key: string;
+};
 
 type DirectUploadResult = {
   objectKey: string;
-  objectUrl: string | null;
 };
 
 function logUpload(event: string, data?: Record<string, unknown>): void {
@@ -10,18 +12,7 @@ function logUpload(event: string, data?: Record<string, unknown>): void {
     console.info(`[upload] ${event}`, data);
     return;
   }
-
   console.info(`[upload] ${event}`);
-}
-
-function assertEnv(name: string): string {
-  const value = import.meta.env[name as keyof ImportMetaEnv];
-
-  if (typeof value !== "string" || value.trim() === "") {
-    throw new Error(`Missing required env var: ${name}`);
-  }
-
-  return value.trim();
 }
 
 function ensurePdfFile(file: File): void {
@@ -33,92 +24,43 @@ function ensurePdfFile(file: File): void {
   }
 }
 
-function sanitizeFilename(filename: string): string {
-  return filename
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, "-")
-    .replace(/[^a-z0-9._-]/g, "")
-    .replace(/-+/g, "-");
-}
-
-function createObjectKey(filename: string): string {
-  const now = new Date();
-  const y = now.getUTCFullYear();
-  const m = String(now.getUTCMonth() + 1).padStart(2, "0");
-  const d = String(now.getUTCDate()).padStart(2, "0");
-  const safeName = sanitizeFilename(filename);
-  const randomId = crypto.randomUUID();
-
-  return `uploads/${y}/${m}/${d}/${randomId}-${safeName}`;
-}
-
-function createR2Client(): S3Client {
-  const accountId = assertEnv("VITE_R2_ACCOUNT_ID");
-  const accessKeyId = assertEnv("VITE_R2_ACCESS_KEY_ID");
-  const secretAccessKey = assertEnv("VITE_R2_SECRET_ACCESS_KEY");
-
-  return new S3Client({
-    region: "auto",
-    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
-    credentials: {
-      accessKeyId,
-      secretAccessKey,
-    },
+async function requestPresignedUrl(file: File): Promise<PresignResponse> {
+  const response = await fetch("/api/upload/presign", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      filename: file.name,
+      content_type: file.type || "application/pdf",
+      size: file.size,
+    }),
   });
-}
 
-function toObjectUrl(objectKey: string): string | null {
-  const publicBaseUrl = import.meta.env.VITE_R2_PUBLIC_BASE_URL;
-
-  if (typeof publicBaseUrl === "string" && publicBaseUrl.trim() !== "") {
-    const base = publicBaseUrl.trim().replace(/\/+$/, "");
-    return `${base}/${encodeURIComponent(objectKey).replace(/%2F/g, "/")}`;
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`Presign request failed: ${response.status} ${text}`);
   }
 
-  return null;
+  return (await response.json()) as PresignResponse;
 }
 
 export async function uploadPdfDirectToR2(file: File): Promise<DirectUploadResult> {
-  logUpload("start", {
-    filename: file.name,
-    size: file.size,
-    contentType: file.type || "application/pdf",
-  });
+  logUpload("start", { filename: file.name, size: file.size });
 
   ensurePdfFile(file);
 
-  try {
-    const bucketName = assertEnv("VITE_R2_BUCKET");
-    const objectKey = createObjectKey(file.name);
-    const client = createR2Client();
+  const { presigned_url, object_key } = await requestPresignedUrl(file);
+  logUpload("presign_received", { object_key });
 
-    logUpload("put_object_request", {
-      bucket: bucketName,
-      objectKey,
-    });
+  const uploadResponse = await fetch(presigned_url, {
+    method: "PUT",
+    headers: { "Content-Type": file.type || "application/pdf" },
+    body: file,
+  });
 
-    await client.send(
-      new PutObjectCommand({
-        Bucket: bucketName,
-        Key: objectKey,
-        Body: new Uint8Array(await file.arrayBuffer()),
-        ContentType: file.type || "application/pdf",
-        ContentLength: file.size,
-      }),
-    );
-
-    const result = {
-      objectKey,
-      objectUrl: toObjectUrl(objectKey),
-    };
-
-    logUpload("success", result);
-    return result;
-  } catch (error) {
-    logUpload("error", {
-      message: error instanceof Error ? error.message : "Unknown upload error",
-    });
-    throw error;
+  if (!uploadResponse.ok) {
+    throw new Error(`R2 upload failed: ${uploadResponse.status}`);
   }
+
+  logUpload("success", { object_key });
+  return { objectKey: object_key };
 }
