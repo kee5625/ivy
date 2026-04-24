@@ -1,0 +1,10 @@
+name = "ivy-upload"
+main = "client/src/api/upload.ts"
+compatibility_date = "2024-01-01"
+
+[env.production.vars]
+R2_BUCKET_NAME = "books"
+
+[[env.production.r2_buckets]]
+binding = "R2"
+bucket_name = "books"
