@@ -151,14 +151,14 @@ LANGGRAPH_CHECKPOINT_POSTGRES_URI=${DATABASE_URL}
 
 ## TODO
 
-- S3/MinIO client for PDF storage
-- Anthropic LLM client
-- Redis connection for job progress
-- Implement ingestion agent (PDF → chapters)
-- Implement timeline agent (chapters → global timeline)
-- Implement plot hole agent (timeline → findings)
-- WebSocket endpoint for real-time progress
-- API routes: upload, get job, list chapters/timeline/plotholes
-- NetworkX character graph export endpoint
-- docker-compose.yml for local dev
+- [X] S3/MinIO client for PDF storage
+- [X] Anthropic LLM client
+- [ ] Redis connection for job progress
+- [ ] Implement ingestion agent (PDF → chapters)
+- [ ] Implement timeline agent (chapters → global timeline)
+- [ ] Implement plot hole agent (timeline → findings)
+- [ ] WebSocket endpoint for real-time progress
+- [X] API routes: upload, get job, list chapters/timeline/plotholes
+- [ ] NetworkX character graph export endpoint
+- [ ] docker-compose.yml for local dev
 
