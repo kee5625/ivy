@@ -1,3 +1,3 @@
-from api.routes import system
+from api.routes import system, upload
 
-__all__ = ["system"]
+__all__ = ["system", "upload"]
