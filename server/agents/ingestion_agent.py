@@ -2,11 +2,13 @@
 
 from langgraph.func import entrypoint, task
 
+from utils.storage import download_pdf as fetch_pdf_bytes
+
 
 @task
-def download_pdf():
-    """Download PDF from blob storage."""
-    pass
+def download_pdf(object_key: str) -> bytes:
+    """Download PDF bytes from R2."""
+    return fetch_pdf_bytes(object_key)
 
 
 @task
