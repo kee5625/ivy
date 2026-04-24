@@ -1,12 +1,12 @@
 # Dependencies
-/node_modules
+*node_modules
 __pycache__
 *.py[cod]
 *$py.class
 .venv
 venv/
-package-lock.json
-uv.lock
+*package-lock.json
+*uv.lock
 
 # Build outputs
 /dist
