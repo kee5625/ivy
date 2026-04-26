@@ -144,3 +144,61 @@ class TimelineRepository:
             job_id,
         )
         return [dict(row) for row in rows]
+
+
+class EntityRepository:
+    """Repository for entity operations."""
+
+    @staticmethod
+    async def get_by_job(job_id: str) -> list[dict[str, Any]]:
+        """Get all entities for a job."""
+        rows = await fetch(
+            "SELECT * FROM entities WHERE job_id = $1 ORDER BY name",
+            job_id,
+        )
+        return [dict(row) for row in rows]
+
+
+class PlotHoleRepository:
+    """Repository for plot hole operations."""
+
+    @staticmethod
+    async def delete_by_job(job_id: str) -> int:
+        """Delete all plot holes for a job. Returns count deleted."""
+        status = await execute("DELETE FROM plot_holes WHERE job_id = $1", job_id)
+        try:
+            return int(status.split()[-1])
+        except (ValueError, IndexError):
+            return 0
+
+    @staticmethod
+    async def create(
+        hole_id: str,
+        job_id: str,
+        hole_type: str,
+        severity: str,
+        description: str,
+        chapters_involved: list[int],
+        characters_involved: list[str],
+        events_involved: list[str],
+        confidence: float | None,
+    ) -> None:
+        """Insert a plot hole record."""
+        await execute(
+            """
+            INSERT INTO plot_holes (
+                hole_id, job_id, hole_type, severity, description,
+                chapters_involved, characters_involved, events_involved, confidence
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            """,
+            hole_id,
+            job_id,
+            hole_type,
+            severity,
+            description,
+            chapters_involved,
+            characters_involved,
+            events_involved,
+            confidence,
+        )

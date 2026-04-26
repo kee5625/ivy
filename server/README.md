@@ -153,10 +153,10 @@ LANGGRAPH_CHECKPOINT_POSTGRES_URI=${DATABASE_URL}
 
 - [X] S3/MinIO client for PDF storage
 - [X] Anthropic LLM client
-- [ ] Redis connection for job progress
-- [ ] Implement ingestion agent (PDF → chapters)
-- [ ] Implement timeline agent (chapters → global timeline)
-- [ ] Implement plot hole agent (timeline → findings)
+- [X] Redis connection for job progress
+- [X] Implement ingestion agent (PDF → chapters)
+- [X] Implement timeline agent (chapters → global timeline)
+- [X] Implement plot hole agent (timeline → findings)
 - [ ] WebSocket endpoint for real-time progress
 - [X] API routes: upload, get job, list chapters/timeline/plotholes
 - [ ] NetworkX character graph export endpoint
