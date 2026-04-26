@@ -108,7 +108,7 @@ async def _save_chapter(job_id: str, result: dict) -> None:
 @entrypoint()
 async def ingestion_agent(job_id: str, pdf_key: str) -> str:
     """Download → parse → extract → save."""
-    await _update_status(job_id, status="ingesting", current_agent="ingestion_agent")
+    await _update_status(job_id, status="ingestion_in_progress", current_agent="ingestion_agent")
 
     try:
         pdf_bytes = await download_pdf(pdf_key)
@@ -119,7 +119,7 @@ async def ingestion_agent(job_id: str, pdf_key: str) -> str:
 
         await _update_status(
             job_id,
-            status="timeline",
+            status="ingestion_complete",
             current_agent="timeline_agent",
             completed_agents=["ingestion_agent"],
         )
