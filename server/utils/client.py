@@ -149,3 +149,69 @@ def timeline_chat_completion(payload: dict[str, Any]) -> list[dict[str, Any]]:
         raise RuntimeError("Timeline output invalid: 'events' is not a list")
 
     return raw_events
+
+
+def merge_timeline_chat_completion(payload: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Merge chapter-local events into ordered sub-timeline. Returns merged event list."""
+    client = get_client()
+
+    prompt = (
+        "You are a narrative timeline analyst.\n"
+        "Merge this batch of chapter-local events into one ordered story sub-timeline.\n\n"
+        "Requirements:\n"
+        "1) Every `source_event_id` from the input must appear exactly once in the output.\n"
+        "2) Order only the events provided in this batch.\n"
+        "3) Preserve narrative causality when setting `causes` and `caused_by`.\n"
+        "4) Use `source_event_id` values from the input when referencing related events.\n"
+        "5) `relative_time_anchor_event_id` must be null or one input `source_event_id`.\n"
+        "6) Keep events concise and do not invent unsupported specifics.\n"
+        "7) `confidence` must stay between 0.0 and 1.0.\n\n"
+        "Respond in JSON: {\"events\": [{\"source_event_id\": ..., \"description\": ..., "
+        "\"chapter_num\": ..., \"chapter_title\": ..., \"order\": ..., "
+        "\"characters_present\": [...], \"location\": ..., \"causes\": [...], "
+        "\"caused_by\": [...], \"time_reference\": ..., \"inferred_date\": ..., "
+        "\"inferred_year\": ..., \"relative_time_anchor_event_id\": ..., \"confidence\": ...}]}\n\n"
+        f"Input local events:\n{json.dumps(payload, ensure_ascii=False)}"
+    )
+
+    response = client.chat.completions.create(
+        messages=[{"role": "user", "content": prompt}],
+        model=MODEL,
+    )
+    raw_content = response.choices[0].message.content or "{}"
+    parsed = json.loads(raw_content)
+    raw_events = parsed.get("events", [])
+
+    if not isinstance(raw_events, list):
+        raise RuntimeError("Merge output invalid: 'events' is not a list")
+
+    return raw_events
+
+
+def final_order_chat_completion(payload: list[dict[str, Any]]) -> list[str]:
+    """Return globally ordered source_event_ids across all batches."""
+    client = get_client()
+
+    prompt = (
+        "You are a narrative chronology analyst.\n"
+        "Return the globally ordered list of source event ids for the provided events.\n\n"
+        "Requirements:\n"
+        "1) Every `source_event_id` must appear exactly once.\n"
+        "2) Preserve the most plausible global chronology across batches.\n"
+        "3) Return only the ordered ids, do not rewrite event content.\n\n"
+        "Respond in JSON: {\"ordered_source_event_ids\": [\"id1\", \"id2\", ...]}\n\n"
+        f"Input events:\n{json.dumps(payload, ensure_ascii=False)}"
+    )
+
+    response = client.chat.completions.create(
+        messages=[{"role": "user", "content": prompt}],
+        model=MODEL,
+    )
+    raw_content = response.choices[0].message.content or "{}"
+    parsed = json.loads(raw_content)
+    ordered_ids = parsed.get("ordered_source_event_ids", [])
+
+    if not isinstance(ordered_ids, list):
+        raise RuntimeError("Final order output invalid: 'ordered_source_event_ids' is not a list")
+
+    return [str(i) for i in ordered_ids if isinstance(i, str)]
