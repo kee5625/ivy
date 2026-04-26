@@ -7,10 +7,12 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 -- Job status enum
 CREATE TYPE job_status AS ENUM (
     'pending',
-    'ingesting',
-    'timeline',
-    'plot_hole',
-    'complete',
+    'ingestion_in_progress',
+    'ingestion_complete',
+    'timeline_in_progress',
+    'timeline_complete',
+    'plot_hole_in_progress',
+    'plot_hole_complete',
     'failed'
 );
 
