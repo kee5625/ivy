@@ -106,8 +106,10 @@ async def _save_chapter(job_id: str, result: dict) -> None:
 
 
 @entrypoint()
-async def ingestion_agent(job_id: str, pdf_key: str) -> str:
+async def ingestion_agent(inputs: dict) -> str:
     """Download → parse → extract → save."""
+    job_id: str = inputs["job_id"]
+    pdf_key: str = inputs["pdf_key"]
     await _update_status(job_id, status="ingestion_in_progress", current_agent="ingestion_agent")
 
     try:

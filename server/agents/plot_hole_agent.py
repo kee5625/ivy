@@ -437,8 +437,9 @@ async def persist_findings(job_id: str, findings: list[dict[str, Any]]) -> int:
 # =============================================================================
 
 @entrypoint()
-async def plot_hole_agent(job_id: str) -> list[dict[str, Any]]:
+async def plot_hole_agent(inputs: dict) -> list[dict[str, Any]]:
     """Load story state → extract plot holes → persist findings."""
+    job_id: str = inputs["job_id"]
     await _update_status(
         job_id,
         status="plot_hole_in_progress",

@@ -49,7 +49,7 @@ def _build_local_chapter_payload(chapter: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "chapter_num": int(chapter.get("chapter_num", 0)),
-        "chapter_title": str(chapter.get("chapter_title", "")).strip(),
+        "chapter_title": str(chapter.get("title", "")).strip(),
         "summary_text": summary_text,
         "key_events": [e.strip() for e in key_events if isinstance(e, str) and e.strip()][:_MAX_KEY_EVENTS_PER_CHAPTER],
         "characters": [c.strip() for c in characters if isinstance(c, str) and c.strip()][:_MAX_CHARACTERS_PER_CHAPTER],
@@ -59,7 +59,7 @@ def _build_local_chapter_payload(chapter: dict[str, Any]) -> dict[str, Any]:
 
 def _normalize_local_events(chapter: dict[str, Any], raw_events: list[dict[str, Any]]) -> list[dict[str, Any]]:
     chapter_num = int(chapter.get("chapter_num", 0))
-    chapter_title = str(chapter.get("chapter_title", "")).strip()
+    chapter_title = str(chapter.get("title", "")).strip()
     normalized: list[dict[str, Any]] = []
 
     for idx, raw in enumerate(raw_events, start=1):
@@ -486,8 +486,9 @@ async def persist_events(job_id: str, events: list[dict[str, Any]]) -> int:
 # ---------------------------------------------------------------------------
 
 @entrypoint()
-async def timeline_agent(job_id: str) -> str:
+async def timeline_agent(inputs: dict) -> str:
     """Load chapters → extract local timelines → merge → persist."""
+    job_id: str = inputs["job_id"]
     await _update_status(job_id, "timeline_in_progress", "timeline_agent")
 
     try:
