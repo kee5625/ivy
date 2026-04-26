@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { uploadPdfDirectToR2 } from "@/api/upload";
+import { createJob, uploadPdfDirectToR2 } from "@/api/upload";
 
 export default function Home() {
   const navigate = useNavigate();
@@ -29,7 +29,8 @@ export default function Home() {
     try {
       setIsUploading(true);
       const upload = await uploadPdfDirectToR2(selectedFile);
-      navigate(`/graph/${encodeURIComponent(upload.objectKey)}`);
+      const jobId = await createJob(selectedFile.name, upload.objectKey);
+      navigate(`/graph/${jobId}`);
     } catch {
       alert("Failed to upload file.");
       inflightRef.current = false;

@@ -4,13 +4,14 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
-from api import router
+
 
 
 _env_path = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(_env_path, override=True)
 
 from db import init_pool, close_pool, init_redis, close_redis
+from api import router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

@@ -1,10 +1,29 @@
+import json
 import os
+
 import asyncpg
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 DATABASE_URL = os.getenv("DATABASE_URL")
 _pool: asyncpg.Pool | None = None
+
+
+async def _init_connection(conn: asyncpg.Connection) -> None:
+    await conn.set_type_codec(
+        "jsonb",
+        encoder=json.dumps,
+        decoder=json.loads,
+        schema="pg_catalog",
+        format="text",
+    )
+    await conn.set_type_codec(
+        "json",
+        encoder=json.dumps,
+        decoder=json.loads,
+        schema="pg_catalog",
+        format="text",
+    )
 
 
 async def init_pool() -> asyncpg.Pool:
@@ -21,9 +40,8 @@ async def init_pool() -> asyncpg.Pool:
         min_size=5,
         max_size=20,
         command_timeout=60,
-        server_settings={
-            "jit": "off",
-        },
+        server_settings={"jit": "off"},
+        init=_init_connection,
     )
     return _pool
 

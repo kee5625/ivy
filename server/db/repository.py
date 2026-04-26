@@ -163,6 +163,15 @@ class PlotHoleRepository:
     """Repository for plot hole operations."""
 
     @staticmethod
+    async def get_by_job(job_id: str) -> list[dict[str, Any]]:
+        """Get all plot holes for a job."""
+        rows = await fetch(
+            "SELECT * FROM plot_holes WHERE job_id = $1 ORDER BY created_at",
+            job_id,
+        )
+        return [dict(row) for row in rows]
+
+    @staticmethod
     async def delete_by_job(job_id: str) -> int:
         """Delete all plot holes for a job. Returns count deleted."""
         status = await execute("DELETE FROM plot_holes WHERE job_id = $1", job_id)
