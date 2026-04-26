@@ -8,7 +8,10 @@ from utils.storage import download_pdf as fetch_pdf_bytes
 @task
 def download_pdf(object_key: str) -> bytes:
     """Download PDF bytes from R2."""
-    return fetch_pdf_bytes(object_key)
+    pdf_bytes = fetch_pdf_bytes(object_key)
+    if not pdf_bytes:
+        raise RuntimeError("Error downloading pdf.")
+    return pdf_bytes
 
 
 @task
