@@ -4,20 +4,18 @@ import os
 import time
 from typing import Any
 
-from groq import Groq
+from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
-MODEL = "qwen/qwen3-32b"
+MODEL = "gpt-4o-mini"
 MAX_CHAPTER_CHARS = 15_000
 MAX_RETRIES = 3
 RETRY_BASE_DELAY = 2.0
 
 
-def get_client() -> Groq:
-    client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
-
-    return client
+def get_client() -> OpenAI:
+    return OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 
 def ingestion_chat_completion(chapter_chunk: dict[str, Any]) -> dict[str, Any]:
