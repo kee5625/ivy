@@ -1,132 +1,200 @@
-# Ivy - AI Dev Days Hackathon Submission
+# Ivy
 
-Ivy is an Azure-backed story-analysis assistant for authors. It ingests a manuscript PDF, extracts chapter summaries and characters, builds a global timeline, and flags plot holes or inconsistencies before they slow a book down._
-
-DEMO: https://youtu.be/ekUmYZkNP70
+AI-powered manuscript analysis tool. Upload a PDF, get structured chapter data, a global story timeline, and a list of detected plot holes.
 
 ---
 
-## Team Members
+## What it does
 
-- **Kee5625** (Backend & Cloud Architecture)
-  - GitHub: [kee5625](https://github.com/kee5625)
-  - Microsoft Innovative Studio: [Karthik Rachamolla]
-- **Sharvan R** (Frontend Development)
-  - GitHub: [@sharvanr](https://github.com/sharvanr)
+Ivy runs a three-stage agent pipeline on your manuscript:
 
----
+1. **Ingestion** — parses the PDF chapter by chapter, extracts summaries, key events, characters, and temporal markers
+2. **Timeline** — merges chapter-local events into a single globally ordered story chronology with causality links
+3. **Plot Hole Detection** — cross-references the finished story state and flags high-confidence contradictions (timeline paradoxes, location conflicts, dead-character reappearances, unresolved setups)
 
-## More secription
-
-- **Microsoft Azure AI Foundry:** The core intelligence of Ivy is powered by AI Foundry. We utilize `gpt-4o-mini` and `gpt-4.1` deployments to drive our multi-agent orchestration pipeline (Ingestion, Timeline Merging, and Plot Hole Detection).
-- **Azure Deployment:** Ivy is a almost production-ready cloud application deployed natively on Azure services, utilizing **Azure Container Apps**, **Azure Static Web Apps**, **Azure Cosmos DB**, and **Azure Blob Storage**.
-- **Agentic Design & Innovation:** We implemented a sophisticated multi-agent pipeline that transforms raw unstructured text (PDF) into a globally ordered narrative state, allowing downstream agents to reason over complex story continuity.
+Results are available through a web UI showing chapter cards, a visual timeline rail, and a list of findings with severity and confidence scores.
 
 ---
 
-## Project Description
+## Stack
 
-Writing a book often takes far longer than it should because authors have to constantly re-check their own continuity (for longer than 5 years sometimes). Character details drift, timelines stop lining up, setups are forgotten, and plot holes appear across chapters that were written weeks or months apart.
-
-Ivy is built to reduce that friction. It acts like a narrative QA layer for long-form fiction so authors can catch inconsistencies earlier, spend less time manually cross-referencing chapters, and move from draft to finished manuscript faster.
-
-### Problem It Solves
-
-Authors and story teams lose time on:
-
-- Plot holes that only become obvious after many chapters.
-- Character, location, and event inconsistencies across drafts.
-- Broken chronology when scenes are reordered or revised.
-- Slow manual review loops before a manuscript is ready to ship.
-
-Ivy helps accelerate the writing and editing process by turning a manuscript into structured story data, then using AI to surface risks that would otherwise take hours of rereading to find.
-
-### Features and Functionality
-
-- **PDF Manuscript Upload:** Secure upload and background job tracking.
-- **Agentic Ingestion:** Chapter-by-chapter parsing and structured extraction (summaries, characters, key events).
-- **Timeline Generation:** Merging local chapter events into a single, cohesive global story chronology.
-- **Plot-Hole Detection:** Cross-referencing the generated story state to flag logical inconsistencies and continuity errors.
-- **Interactive UI:** Frontend views for job progress, chapters, timeline output, and plot hole findings.
+| Layer | Technology |
+|---|---|
+| Backend | FastAPI, Python 3.11+, LangGraph (functional API) |
+| LLM | OpenAI (`gpt-4o-mini` by default, configurable) |
+| Database | PostgreSQL via [Neon](https://neon.tech) |
+| Job state | Redis via [Upstash](https://upstash.com) |
+| File storage | S3-compatible via [Cloudflare R2](https://developers.cloudflare.com/r2/) |
+| Frontend | React 18, TypeScript, Vite, Tailwind CSS |
 
 ---
 
-## Agentic Design & Innovation
+## Prerequisites
 
-Ivy's backend pipeline is designed around three distinct, cooperating agents:
-
-1.  **Ingestion Agent:** Reads raw text chunks, isolating characters, temporal markers, and key events into structured JSON.
-2.  **Timeline Agent:** Takes the output of the Ingestion Agent, maps local events, and executes a complex batch-merge using `gpt-4.1` (Structured Outputs) to weave a globally ordered chronological timeline.
-3.  **Plot Hole Agent:** Analyzes the final global state to find logical gaps, broken setups, or shifting character facts, assigning confidence scores to its findings.
-
----
-
-## Architecture & Technologies Used
-
-### Architecture Diagram
-
-![Ivy architecture flow](docs/architecture-diagram.svg)
-
-_(This diagram keeps the system intentionally simple: the frontend sends manuscripts into the FastAPI backend, the backend coordinates the agents, Azure services store the data and power the reasoning.)_
-
-### Technologies Used
-
-- **Backend:** FastAPI (Python) for API endpoints and in-process pipeline orchestration.
-- **Frontend:** React + Vite for upload, monitoring, and results visualization.
-- **AI/LLMs:** Azure AI Foundry for OpenAI-compatible model access.
-- **Compute:** Azure Container Apps (Backend) & Azure Static Web Apps (Frontend).
-- **Storage & State:** Azure Blob Storage (PDFs) & Azure Cosmos DB (jobs, chapters, timeline events, and findings).
+- Python 3.11+
+- [uv](https://docs.astral.sh/uv/) for Python dependency management
+- Node.js 20+
+- A Neon PostgreSQL database
+- An Upstash Redis instance
+- A Cloudflare R2 bucket
+- An OpenAI API key
 
 ---
 
-## Local Setup
+## Local setup
 
-### Backend
+### 1. Environment
 
-1. Install Python 3.11+ and `uv`.
-2. Copy `backend/.env.example` to `backend/.env`.
-3. Fill in the required Azure values:
-   - `PROJECT_KEY`
-   - `OPENAI_ENDPOINT` or `PROJECT_ENDPOINT`
-   - Cosmos DB settings
-   - Blob Storage settings
-4. Install dependencies and run the API:
-   ```bash
-   cd backend
-   uv sync
-   uv run uvicorn app:app --reload --host 0.0.0.0 --port 8000
-   ```
+Copy the example env file and fill in values:
 
-### Frontend
+```bash
+cp server/.env.example .env
+```
 
-1. Install Node.js 20+.
-2. Install dependencies and start Vite:
-   ```bash
-   cd ivy-client
-   npm install
-   npm run dev
-   ```
-   _(The Vite dev server is already aligned to proxy `/api/*` to the backend)._
+Required variables:
+
+```env
+# PostgreSQL (Neon)
+DATABASE_URL=postgresql://user:pass@host/dbname?sslmode=require
+
+# Redis (Upstash)
+REDIS_URL=rediss://default:token@host.upstash.io:6379
+
+# Cloudflare R2
+S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
+S3_ACCESS_KEY=...
+S3_SECRET_KEY=...
+S3_BUCKET=ivy-pdfs
+S3_REGION=auto
+
+# OpenAI
+OPENAI_API_KEY=sk-...
+```
+
+### 2. Database
+
+Run the schema against your Neon database:
+
+```bash
+psql $DATABASE_URL -f server/schema.sql
+```
+
+### 3. Backend
+
+```bash
+cd server
+uv sync
+uv run uvicorn main:app --reload --host 0.0.0.0 --port 8000
+```
+
+### 4. Frontend
+
+```bash
+cd client
+npm install
+npm run dev
+```
+
+Vite proxies `/api/*` to `http://localhost:8000` — no additional config needed.
+
+Open `http://localhost:5173`.
 
 ---
 
-## Azure AI Foundry Setup
+## How the pipeline works
 
-Deploy at least:
+```
+Upload PDF → POST /api/upload/presign → PUT to R2
+                ↓
+           POST /api/jobs
+                ↓
+     ┌──────────────────────┐
+     │   Ingestion Agent    │  parallel LLM calls per chapter
+     └──────────┬───────────┘
+                ↓
+     ┌──────────────────────┐
+     │   Timeline Agent     │  local extraction → batch merge → global order
+     └──────────┬───────────┘
+                ↓
+     ┌──────────────────────┐
+     │  Plot Hole Agent     │  single LLM call over full story state
+     └──────────┬───────────┘
+                ↓
+           Results UI
+```
 
-- `gpt-4o-mini` (for ingestion, local timeline extraction, and fallbacks)
-- `gpt-4.1` (for timeline merge)
-
-The backend supports a shared Foundry client config (`PROJECT_KEY`, `OPENAI_ENDPOINT`) and optional per-model overrides (e.g., `TIMELINE_MERGE_ENDPOINT`, `TIMELINE_MERGE_KEY`) for specific routing needs.
+Job status is written to both PostgreSQL (durable) and Redis (live polling). The frontend polls `GET /api/jobs/:id` every 3 seconds until a terminal state is reached.
 
 ---
 
-## Future Roadmap (Where Azure Can Be Used Next)
+## API reference
 
-To continue evolving Ivy beyond the hackathon, we plan to implement:
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/api/upload/presign` | Generate a presigned R2 PUT URL |
+| `POST` | `/api/jobs` | Create a job and start the pipeline |
+| `GET` | `/api/jobs/:id` | Get current job status |
+| `GET` | `/api/jobs/:id/chapters` | Get extracted chapter data |
+| `GET` | `/api/jobs/:id/timeline` | Get ordered timeline events |
+| `GET` | `/api/jobs/:id/plot-holes` | Get detected plot holes |
 
-- **Microsoft Agent Framework:** Formalize orchestration between the Ingestion, Timeline, and Plot-Hole agents to replace the current in-process pipeline and enable scalable, distributed agent execution.
-- **Azure MCP (Model Context Protocol):** Improve developer and demo workflows for prompt inspection, environment debugging, and deep integration with VS Code.
-- **Azure AI Search:** Add semantic retrieval over chapters, entities, and timeline events so agents can reason over retrieved vector evidence instead of relying purely on large prompt payloads.
-- **Azure Apache Gremlin:** Build a character relation neural network graph.
-- **Azure Key Vault & Managed Identity:** Centralize secrets and reduce direct secret sprawl in Container Apps.
+---
+
+## Configuration
+
+Model and pipeline behavior can be tuned via environment variables:
+
+| Variable | Default | Description |
+|---|---|---|
+| `OPENAI_API_KEY` | — | Required. OpenAI API key |
+| `DATABASE_URL` | — | Required. PostgreSQL connection string |
+| `REDIS_URL` | — | Required. Redis connection string |
+| `S3_ENDPOINT` | — | Required. R2/S3 endpoint URL |
+| `S3_ACCESS_KEY` | — | Required. R2/S3 access key |
+| `S3_SECRET_KEY` | — | Required. R2/S3 secret key |
+| `S3_BUCKET` | `ivy-pdfs` | Bucket name |
+| `S3_REGION` | `auto` | Bucket region |
+
+To swap models, edit `MODEL` in `server/utils/client.py`.
+
+---
+
+## Project structure
+
+```
+ivy/
+├── server/                 # FastAPI backend
+│   ├── agents/             # LangGraph pipeline agents
+│   │   ├── ingestion_agent.py
+│   │   ├── timeline_agent.py
+│   │   └── plot_hole_agent.py
+│   ├── api/routes/         # REST endpoints
+│   ├── db/                 # DB pool, Redis, repositories
+│   ├── services/           # PDF parsing
+│   ├── utils/              # LLM client, storage, job state
+│   ├── schema.sql          # Full database schema
+│   └── main.py
+└── client/                 # React frontend
+    └── src/
+        ├── api/            # Fetch wrappers
+        ├── components/     # UI components
+        ├── hooks/          # useJobPolling, useJobResults
+        └── pages/          # Home, graph status, results
+```
+
+---
+
+## Contributing
+
+1. Fork the repo and create a branch off `main`
+2. Make your changes with clear, focused commits
+3. Open a pull request describing what changed and why
+4. Keep PRs scoped — one concern per PR
+
+Please open an issue before starting large changes.
+
+---
+
+## License
+
+MIT
