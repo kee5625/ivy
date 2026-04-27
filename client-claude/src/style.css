@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+/* ── Runtime palette tokens (updated by applyPalette()) ─────────── */
+:root {
+  --ivy-bg:         oklch(0.975 0.008 75);
+  --ivy-bgRaised:   oklch(0.99 0.005 75);
+  --ivy-bgInk:      oklch(0.965 0.012 70);
+  --ivy-panel:      oklch(0.945 0.014 70);
+  --ivy-rule:       oklch(0.86 0.012 70);
+  --ivy-ruleSoft:   oklch(0.92 0.01 70);
+  --ivy-ink:        oklch(0.22 0.012 60);
+  --ivy-inkDeep:    oklch(0.14 0.014 60);
+  --ivy-inkMute:    oklch(0.48 0.012 60);
+  --ivy-inkFaint:   oklch(0.62 0.01 60);
+  --ivy-accent:     oklch(0.48 0.13 25);
+  --ivy-accentSoft: oklch(0.92 0.04 25);
+  --ivy-accentInk:  oklch(0.32 0.10 25);
+  --ivy-sevHigh:    oklch(0.48 0.13 25);
+  --ivy-sevMed:     oklch(0.62 0.12 70);
+  --ivy-sevLow:     oklch(0.55 0.04 70);
+}
+
+/* ── Tailwind theme — inline so utilities reference the live vars ── */
+@theme inline {
+  /* Colors */
+  --color-ivy-bg:         var(--ivy-bg);
+  --color-ivy-bgRaised:   var(--ivy-bgRaised);
+  --color-ivy-bgInk:      var(--ivy-bgInk);
+  --color-ivy-panel:      var(--ivy-panel);
+  --color-ivy-rule:       var(--ivy-rule);
+  --color-ivy-ruleSoft:   var(--ivy-ruleSoft);
+  --color-ivy-ink:        var(--ivy-ink);
+  --color-ivy-inkDeep:    var(--ivy-inkDeep);
+  --color-ivy-inkMute:    var(--ivy-inkMute);
+  --color-ivy-inkFaint:   var(--ivy-inkFaint);
+  --color-ivy-accent:     var(--ivy-accent);
+  --color-ivy-accentSoft: var(--ivy-accentSoft);
+  --color-ivy-accentInk:  var(--ivy-accentInk);
+  --color-ivy-sevHigh:    var(--ivy-sevHigh);
+  --color-ivy-sevMed:     var(--ivy-sevMed);
+  --color-ivy-sevLow:     var(--ivy-sevLow);
+
+  /* Fonts */
+  --font-sans:  "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Source Serif 4", ui-serif, Georgia, serif;
+  --font-mono:  "JetBrains Mono", ui-monospace, "Cascadia Code", monospace;
+}
+
+/* ── Base ────────────────────────────────────────────────────────── */
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  background-color: var(--ivy-bg);
+  color: var(--ivy-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Scrollbar ───────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--ivy-bgInk); }
+::-webkit-scrollbar-thumb { background: var(--ivy-rule); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--ivy-inkFaint); }
