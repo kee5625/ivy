@@ -460,10 +460,18 @@ def merge_batch_events_sync(local_events: list[dict[str, Any]], batch_index: int
 async def persist_events(job_id: str, events: list[dict[str, Any]]) -> int:
     logger.info("[TimelineAgent] job=%s persisting %d events to DB", job_id, len(events))
     t0 = time.perf_counter()
+
+    # Prefix all event IDs with job_id[:8] so sequential IDs like evt_001
+    # don't collide across different jobs in the global timeline_events table.
+    prefix = job_id[:8]
+
+    def _scoped(eid: str | None) -> str | None:
+        return f"{prefix}_{eid}" if eid else None
+
     count = 0
     for evt in events:
         await TimelineRepository.create(
-            event_id=evt["event_id"],
+            event_id=_scoped(evt["event_id"]),
             job_id=job_id,
             description=evt["description"],
             chapter_num=evt["chapter_num"],
@@ -471,15 +479,16 @@ async def persist_events(job_id: str, events: list[dict[str, Any]]) -> int:
             chapter_title=evt.get("chapter_title"),
             characters_present=evt.get("characters_present", []),
             location=evt.get("location"),
-            causes=evt.get("causes", []),
-            caused_by=evt.get("caused_by", []),
+            causes=[_scoped(c) for c in evt.get("causes", []) if c],
+            caused_by=[_scoped(c) for c in evt.get("caused_by", []) if c],
             time_reference=evt.get("time_reference"),
             inferred_date=evt.get("inferred_date"),
             inferred_year=evt.get("inferred_year"),
-            relative_time_anchor=evt.get("relative_time_anchor"),
+            relative_time_anchor=_scoped(evt.get("relative_time_anchor")),
             confidence=evt.get("confidence"),
         )
         count += 1
+
     logger.info(
         "[TimelineAgent] job=%s persisted %d events in %.2fs",
         job_id, count, time.perf_counter() - t0,
