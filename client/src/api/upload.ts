@@ -7,6 +7,10 @@ type DirectUploadResult = {
   objectKey: string;
 };
 
+type CreateJobResponse = {
+  job_id: string;
+};
+
 function logUpload(event: string, data?: Record<string, unknown>): void {
   if (data) {
     console.info(`[upload] ${event}`, data);
@@ -63,4 +67,23 @@ export async function uploadPdfDirectToR2(file: File): Promise<DirectUploadResul
 
   logUpload("success", { object_key });
   return { objectKey: object_key };
+}
+
+export async function createJob(
+  filename: string,
+  objectKey: string,
+): Promise<string> {
+  const response = await fetch("/api/jobs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ filename, object_key: objectKey }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`Job creation failed: ${response.status} ${text}`);
+  }
+
+  const data = (await response.json()) as CreateJobResponse;
+  return data.job_id;
 }
