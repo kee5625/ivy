@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
+import time
 import uuid
 from typing import Any
 
@@ -353,6 +355,7 @@ def _retry_delay(exc: Exception, attempt: int) -> float:
 
 @task
 async def load_story_state(job_id: str) -> dict[str, Any]:
+    t0 = time.perf_counter()
     chapters = await ChapterRepository.get_by_job(job_id)
     timeline = await TimelineRepository.get_by_job(job_id)
     entities = await EntityRepository.get_by_job(job_id)
@@ -362,14 +365,26 @@ async def load_story_state(job_id: str) -> dict[str, Any]:
     if not timeline:
         raise RuntimeError(f"No timeline events for job '{job_id}'. Run timeline agent first.")
 
+    chapters_capped = sorted(chapters, key=lambda c: int(c.get("chapter_num", 0)))[
+        :_MAX_CHAPTERS_FOR_PROMPT
+    ]
+    timeline_capped = sorted(timeline, key=lambda e: int(e.get("event_order", 0)))[
+        :_MAX_TIMELINE_EVENTS_FOR_PROMPT
+    ]
+    entities_sorted = sorted(entities, key=lambda e: str(e.get("name", "")).lower())
+
+    logger.info(
+        "[PlotHoleAgent] job=%s story state loaded: %d chapters, %d timeline events, %d entities in %.2fs",
+        job_id,
+        len(chapters_capped),
+        len(timeline_capped),
+        len(entities_sorted),
+        time.perf_counter() - t0,
+    )
     return {
-        "chapters": sorted(chapters, key=lambda c: int(c.get("chapter_num", 0)))[
-            :_MAX_CHAPTERS_FOR_PROMPT
-        ],
-        "timeline": sorted(timeline, key=lambda e: int(e.get("event_order", 0)))[
-            :_MAX_TIMELINE_EVENTS_FOR_PROMPT
-        ],
-        "entities": sorted(entities, key=lambda e: str(e.get("name", "")).lower()),
+        "chapters": chapters_capped,
+        "timeline": timeline_capped,
+        "entities": entities_sorted,
     }
 
 
@@ -378,25 +393,36 @@ async def extract_plot_holes_with_retry(
     story_state: dict[str, Any], job_id: str
 ) -> list[dict[str, Any]]:
     last_exc: Exception | None = None
+    payload = _build_prompt_payload(story_state)
+    payload_bytes = len(json.dumps(payload, ensure_ascii=False).encode())
+    logger.info(
+        "[PlotHoleAgent] job=%s sending plot-hole request: payload=%.1fKB",
+        job_id, payload_bytes / 1024,
+    )
+
     for attempt in range(1, _MAX_RETRIES + 1):
+        t0 = time.perf_counter()
         try:
-            payload = _build_prompt_payload(story_state)
             raw_findings = await asyncio.to_thread(
                 plot_holes_chat_completion, payload, attempt
             )
-            return _normalize_findings(story_state, raw_findings)
+            normalized = _normalize_findings(story_state, raw_findings)
+            logger.info(
+                "[PlotHoleAgent] job=%s attempt %d/%d succeeded: %d raw → %d normalized findings in %.2fs",
+                job_id, attempt, _MAX_RETRIES,
+                len(raw_findings), len(normalized),
+                time.perf_counter() - t0,
+            )
+            return normalized
         except Exception as exc:
             last_exc = exc
             if attempt >= _MAX_RETRIES:
                 break
             delay = _retry_delay(exc, attempt)
             logger.warning(
-                "[PlotHoleAgent] job=%s attempt %d/%d failed: %r, retry in %.1fs",
-                job_id,
-                attempt,
-                _MAX_RETRIES,
-                exc,
-                delay,
+                "[PlotHoleAgent] job=%s attempt %d/%d failed in %.2fs: %r, retry in %.1fs",
+                job_id, attempt, _MAX_RETRIES,
+                time.perf_counter() - t0, exc, delay,
             )
             await asyncio.sleep(delay)
 
@@ -440,6 +466,10 @@ async def persist_findings(job_id: str, findings: list[dict[str, Any]]) -> int:
 async def plot_hole_agent(inputs: dict) -> list[dict[str, Any]]:
     """Load story state → extract plot holes → persist findings."""
     job_id: str = inputs["job_id"]
+
+    logger.info("[PlotHoleAgent] job=%s starting", job_id)
+    t0 = time.perf_counter()
+
     await _update_status(
         job_id,
         status="plot_hole_in_progress",
@@ -451,21 +481,30 @@ async def plot_hole_agent(inputs: dict) -> list[dict[str, Any]]:
         findings = await extract_plot_holes_with_retry(story_state, job_id)
         count = await persist_findings(job_id, findings)
 
+        elapsed = time.perf_counter() - t0
+        logger.info(
+            "[PlotHoleAgent] job=%s COMPLETE: %d finding(s) in %.2fs",
+            job_id, count, elapsed,
+        )
+
         await _update_status(
             job_id,
             status="plot_hole_complete",
             current_agent=None,
             completed_agents=["ingestion_agent", "timeline_agent", "plot_hole_agent"],
         )
-        logger.info("[PlotHoleAgent] job=%s done, %d finding(s)", job_id, count)
         return findings
     except Exception as exc:
-        logger.exception("[PlotHoleAgent] job=%s failed", job_id)
+        logger.exception(
+            "[PlotHoleAgent] job=%s FAILED after %.2fs: %s",
+            job_id, time.perf_counter() - t0, exc,
+        )
         await _update_status(job_id, status="failed", error=str(exc))
         raise
 
 
 async def _update_status(job_id: str, status: str, **kwargs) -> None:
+    logger.debug("[PlotHoleAgent] job=%s status → %s", job_id, status)
     await JobRepository.update_status(job_id, status=status, **kwargs)
     await set_job_status(
         job_id,

@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import re
+import time
 import uuid
 from typing import Any
 
@@ -457,6 +458,8 @@ def merge_batch_events_sync(local_events: list[dict[str, Any]], batch_index: int
 
 @task
 async def persist_events(job_id: str, events: list[dict[str, Any]]) -> int:
+    logger.info("[TimelineAgent] job=%s persisting %d events to DB", job_id, len(events))
+    t0 = time.perf_counter()
     count = 0
     for evt in events:
         await TimelineRepository.create(
@@ -477,7 +480,10 @@ async def persist_events(job_id: str, events: list[dict[str, Any]]) -> int:
             confidence=evt.get("confidence"),
         )
         count += 1
-    logger.info("[TimelineAgent] job=%s persisted %d timeline events", job_id, count)
+    logger.info(
+        "[TimelineAgent] job=%s persisted %d events in %.2fs",
+        job_id, count, time.perf_counter() - t0,
+    )
     return count
 
 
@@ -489,19 +495,40 @@ async def persist_events(job_id: str, events: list[dict[str, Any]]) -> int:
 async def timeline_agent(inputs: dict) -> str:
     """Load chapters → extract local timelines → merge → persist."""
     job_id: str = inputs["job_id"]
+
+    logger.info("[TimelineAgent] job=%s starting", job_id)
+    t0 = time.perf_counter()
+
     await _update_status(job_id, "timeline_in_progress", "timeline_agent")
 
     try:
         chapters = await load_chapters(job_id)
+        logger.info("[TimelineAgent] job=%s loaded %d chapters", job_id, len(chapters))
+
         local_events = await extract_local_timelines(chapters)
+        logger.info(
+            "[TimelineAgent] job=%s local extraction done: %d events from %d chapters",
+            job_id, len(local_events), len(chapters),
+        )
 
         if not local_events:
             raise RuntimeError("Timeline local extraction produced no events")
 
         merged_events = await merge_local_timelines(local_events)
         capped = merged_events[:_MAX_TIMELINE_EVENTS]
+        if len(merged_events) > _MAX_TIMELINE_EVENTS:
+            logger.warning(
+                "[TimelineAgent] job=%s capped events %d → %d",
+                job_id, len(merged_events), _MAX_TIMELINE_EVENTS,
+            )
 
         await persist_events(job_id, capped)
+
+        elapsed = time.perf_counter() - t0
+        logger.info(
+            "[TimelineAgent] job=%s COMPLETE: %d events in %.2fs",
+            job_id, len(capped), elapsed,
+        )
 
         await _update_status(
             job_id,
@@ -509,16 +536,19 @@ async def timeline_agent(inputs: dict) -> str:
             "plot_hole_agent",
             completed_agents=["ingestion_agent", "timeline_agent"],
         )
-        logger.info("[TimelineAgent] job=%s complete with %d events", job_id, len(capped))
         return job_id
 
     except Exception as exc:
-        logger.exception("[TimelineAgent] job=%s failed", job_id)
+        logger.exception(
+            "[TimelineAgent] job=%s FAILED after %.2fs: %s",
+            job_id, time.perf_counter() - t0, exc,
+        )
         await _update_status(job_id, "failed", error=str(exc))
         raise
 
 
 async def _update_status(job_id: str, status: str, current_agent: str | None = None, **kwargs: Any) -> None:
+    logger.debug("[TimelineAgent] job=%s status → %s", job_id, status)
     await JobRepository.update_status(job_id, status=status, current_agent=current_agent, **kwargs)
     await set_job_status(
         job_id,

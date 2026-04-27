@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import re
+import time
 from typing import Any
 
 from openai import OpenAI
@@ -29,6 +30,18 @@ def _parse_json(raw: str | None) -> Any:
     return json.loads(text)
 
 
+def _log_llm_call(fn: str, model: str, prompt_len: int, t0: float, usage: Any) -> None:
+    elapsed = time.perf_counter() - t0
+    if usage:
+        logger.info(
+            "[LLM] %s model=%s prompt_chars=%d tokens(in=%d out=%d) %.2fs",
+            fn, model, prompt_len,
+            usage.prompt_tokens, usage.completion_tokens, elapsed,
+        )
+    else:
+        logger.info("[LLM] %s model=%s prompt_chars=%d %.2fs", fn, model, prompt_len, elapsed)
+
+
 def ingestion_chat_completion(chapter_chunk: dict[str, Any]) -> dict[str, Any]:
     client = get_client()
     chapter_text = str(chapter_chunk.get("text", ""))[:MAX_CHAPTER_CHARS]
@@ -50,11 +63,13 @@ def ingestion_chat_completion(chapter_chunk: dict[str, Any]) -> dict[str, Any]:
         f"Text:\n{chapter_text}"
     )
 
+    t0 = time.perf_counter()
     response = client.chat.completions.create(
         messages=[{"role": "user", "content": prompt}],
         model=MODEL,
         response_format=_JSON_RESPONSE_FORMAT,
     )
+    _log_llm_call("ingestion", MODEL, len(prompt), t0, response.usage)
 
     extracted = _parse_json(response.choices[0].message.content)
 
@@ -97,11 +112,13 @@ def plot_holes_chat_completion(
         f"Story state:\n{json.dumps(story_state, ensure_ascii=False)}"
     )
 
+    t0 = time.perf_counter()
     response = client.chat.completions.create(
         messages=[{"role": "user", "content": prompt}],
         model=model_name or MODEL,
         response_format=_JSON_RESPONSE_FORMAT,
     )
+    _log_llm_call("plot_holes", model_name or MODEL, len(prompt), t0, response.usage)
 
     parsed = _parse_json(response.choices[0].message.content)
 
@@ -136,11 +153,13 @@ def timeline_chat_completion(payload: dict[str, Any]) -> list[dict[str, Any]]:
         f"Chapter data:\n{json.dumps(payload, ensure_ascii=False)}"
     )
 
+    t0 = time.perf_counter()
     response = client.chat.completions.create(
         messages=[{"role": "user", "content": prompt}],
         model=MODEL,
         response_format=_JSON_RESPONSE_FORMAT,
     )
+    _log_llm_call("timeline", MODEL, len(prompt), t0, response.usage)
 
     parsed = _parse_json(response.choices[0].message.content)
     raw_events = parsed.get("events", [])
@@ -173,11 +192,13 @@ def merge_timeline_chat_completion(payload: list[dict[str, Any]]) -> list[dict[s
         f"Input local events:\n{json.dumps(payload, ensure_ascii=False)}"
     )
 
+    t0 = time.perf_counter()
     response = client.chat.completions.create(
         messages=[{"role": "user", "content": prompt}],
         model=MODEL,
         response_format=_JSON_RESPONSE_FORMAT,
     )
+    _log_llm_call("merge_timeline", MODEL, len(prompt), t0, response.usage)
 
     parsed = _parse_json(response.choices[0].message.content)
     raw_events = parsed.get("events", [])
@@ -202,11 +223,13 @@ def final_order_chat_completion(payload: list[dict[str, Any]]) -> list[str]:
         f"Input events:\n{json.dumps(payload, ensure_ascii=False)}"
     )
 
+    t0 = time.perf_counter()
     response = client.chat.completions.create(
         messages=[{"role": "user", "content": prompt}],
         model=MODEL,
         response_format=_JSON_RESPONSE_FORMAT,
     )
+    _log_llm_call("final_order", MODEL, len(prompt), t0, response.usage)
 
     parsed = _parse_json(response.choices[0].message.content)
     ordered_ids = parsed.get("ordered_source_event_ids", [])
