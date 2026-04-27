@@ -1,7 +1,7 @@
 import json
 import logging
 import os
-import time
+import re
 from typing import Any
 
 from openai import OpenAI
@@ -10,12 +10,23 @@ logger = logging.getLogger(__name__)
 
 MODEL = "gpt-4o-mini"
 MAX_CHAPTER_CHARS = 15_000
-MAX_RETRIES = 3
-RETRY_BASE_DELAY = 2.0
+
+_JSON_FENCE = re.compile(r"```(?:json)?\s*([\s\S]*?)```", re.IGNORECASE)
+_JSON_RESPONSE_FORMAT = {"type": "json_object"}
 
 
 def get_client() -> OpenAI:
     return OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+
+
+def _parse_json(raw: str | None) -> Any:
+    text = (raw or "").strip()
+    if not text:
+        return {}
+    match = _JSON_FENCE.search(text)
+    if match:
+        text = match.group(1).strip()
+    return json.loads(text)
 
 
 def ingestion_chat_completion(chapter_chunk: dict[str, Any]) -> dict[str, Any]:
@@ -40,17 +51,12 @@ def ingestion_chat_completion(chapter_chunk: dict[str, Any]) -> dict[str, Any]:
     )
 
     response = client.chat.completions.create(
-        messages=[
-            {
-                "role": "user",
-                "content": prompt,
-            }
-        ],
+        messages=[{"role": "user", "content": prompt}],
         model=MODEL,
+        response_format=_JSON_RESPONSE_FORMAT,
     )
 
-    raw_content = response.choices[0].message.content or "{}"
-    extracted = json.loads(raw_content)
+    extracted = _parse_json(response.choices[0].message.content)
 
     return {
         "chapter_num": chapter_chunk.get("chapter_num"),
@@ -86,23 +92,19 @@ def plot_holes_chat_completion(
         "4) Keep descriptions concise and evidence-based. Mention the contradiction or unresolved setup explicitly.\n"
         "5) `confidence` must reflect how explicit the support is, from 0.0 to 1.0.\n"
         "6) Only use event ids and chapter numbers that exist in the input.\n\n"
+        'Respond in JSON: {"findings": [{"hole_type": ..., "severity": ..., "description": ..., '
+        '"chapters_involved": [...], "characters_involved": [...], "events_involved": [...], "confidence": ...}]}\n\n'
         f"Story state:\n{json.dumps(story_state, ensure_ascii=False)}"
     )
 
     response = client.chat.completions.create(
-        messages=[
-            {
-                "role": "user",
-                "content": prompt,
-            }
-        ],
+        messages=[{"role": "user", "content": prompt}],
         model=model_name or MODEL,
+        response_format=_JSON_RESPONSE_FORMAT,
     )
 
-    raw_content = response.choices[0].message.content or "{}"
-    parsed = json.loads(raw_content)
+    parsed = _parse_json(response.choices[0].message.content)
 
-    findings: Any
     if isinstance(parsed, dict):
         findings = parsed.get("findings", [])
     elif isinstance(parsed, list):
@@ -117,7 +119,6 @@ def plot_holes_chat_completion(
 
 
 def timeline_chat_completion(payload: dict[str, Any]) -> list[dict[str, Any]]:
-    """Call LLM for chapter timeline extraction. Returns raw event list."""
     client = get_client()
 
     prompt = (
@@ -131,16 +132,17 @@ def timeline_chat_completion(payload: dict[str, Any]) -> list[dict[str, Any]]:
         "5) `characters_present` should contain names/slugs only.\n"
         "6) `time_reference` should be null unless the chapter data provides one.\n"
         "7) `confidence` must be between 0.0 and 1.0.\n\n"
-        "Respond in JSON: {\"events\": [{\"description\": ..., \"characters_present\": [...], \"location\": ..., \"time_reference\": ..., \"confidence\": ...}]}\n\n"
+        'Respond in JSON: {"events": [{"description": ..., "characters_present": [...], "location": ..., "time_reference": ..., "confidence": ...}]}\n\n'
         f"Chapter data:\n{json.dumps(payload, ensure_ascii=False)}"
     )
 
     response = client.chat.completions.create(
         messages=[{"role": "user", "content": prompt}],
         model=MODEL,
+        response_format=_JSON_RESPONSE_FORMAT,
     )
-    raw_content = response.choices[0].message.content or "{}"
-    parsed = json.loads(raw_content)
+
+    parsed = _parse_json(response.choices[0].message.content)
     raw_events = parsed.get("events", [])
 
     if not isinstance(raw_events, list):
@@ -150,7 +152,6 @@ def timeline_chat_completion(payload: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def merge_timeline_chat_completion(payload: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Merge chapter-local events into ordered sub-timeline. Returns merged event list."""
     client = get_client()
 
     prompt = (
@@ -164,20 +165,21 @@ def merge_timeline_chat_completion(payload: list[dict[str, Any]]) -> list[dict[s
         "5) `relative_time_anchor_event_id` must be null or one input `source_event_id`.\n"
         "6) Keep events concise and do not invent unsupported specifics.\n"
         "7) `confidence` must stay between 0.0 and 1.0.\n\n"
-        "Respond in JSON: {\"events\": [{\"source_event_id\": ..., \"description\": ..., "
-        "\"chapter_num\": ..., \"chapter_title\": ..., \"order\": ..., "
-        "\"characters_present\": [...], \"location\": ..., \"causes\": [...], "
-        "\"caused_by\": [...], \"time_reference\": ..., \"inferred_date\": ..., "
-        "\"inferred_year\": ..., \"relative_time_anchor_event_id\": ..., \"confidence\": ...}]}\n\n"
+        'Respond in JSON: {"events": [{"source_event_id": ..., "description": ..., '
+        '"chapter_num": ..., "chapter_title": ..., "order": ..., '
+        '"characters_present": [...], "location": ..., "causes": [...], '
+        '"caused_by": [...], "time_reference": ..., "inferred_date": ..., '
+        '"inferred_year": ..., "relative_time_anchor_event_id": ..., "confidence": ...}]}\n\n'
         f"Input local events:\n{json.dumps(payload, ensure_ascii=False)}"
     )
 
     response = client.chat.completions.create(
         messages=[{"role": "user", "content": prompt}],
         model=MODEL,
+        response_format=_JSON_RESPONSE_FORMAT,
     )
-    raw_content = response.choices[0].message.content or "{}"
-    parsed = json.loads(raw_content)
+
+    parsed = _parse_json(response.choices[0].message.content)
     raw_events = parsed.get("events", [])
 
     if not isinstance(raw_events, list):
@@ -187,7 +189,6 @@ def merge_timeline_chat_completion(payload: list[dict[str, Any]]) -> list[dict[s
 
 
 def final_order_chat_completion(payload: list[dict[str, Any]]) -> list[str]:
-    """Return globally ordered source_event_ids across all batches."""
     client = get_client()
 
     prompt = (
@@ -197,16 +198,17 @@ def final_order_chat_completion(payload: list[dict[str, Any]]) -> list[str]:
         "1) Every `source_event_id` must appear exactly once.\n"
         "2) Preserve the most plausible global chronology across batches.\n"
         "3) Return only the ordered ids, do not rewrite event content.\n\n"
-        "Respond in JSON: {\"ordered_source_event_ids\": [\"id1\", \"id2\", ...]}\n\n"
+        'Respond in JSON: {"ordered_source_event_ids": ["id1", "id2", ...]}\n\n'
         f"Input events:\n{json.dumps(payload, ensure_ascii=False)}"
     )
 
     response = client.chat.completions.create(
         messages=[{"role": "user", "content": prompt}],
         model=MODEL,
+        response_format=_JSON_RESPONSE_FORMAT,
     )
-    raw_content = response.choices[0].message.content or "{}"
-    parsed = json.loads(raw_content)
+
+    parsed = _parse_json(response.choices[0].message.content)
     ordered_ids = parsed.get("ordered_source_event_ids", [])
 
     if not isinstance(ordered_ids, list):
