@@ -186,12 +186,6 @@ ivy/
 
 ## Contributing
 
-1. Fork the repo and create a branch off `main`
-2. Make your changes with clear, focused commits
-3. Open a pull request describing what changed and why
-4. Keep PRs scoped — one concern per PR
-
-Please open an issue before starting large changes.
 
 ---
 
