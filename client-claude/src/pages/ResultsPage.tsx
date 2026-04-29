@@ -1,8 +1,6 @@
-import { useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useJobResults } from "@/hooks/useJobResults";
 import { TopBar, Sidebar, type ViewKey } from "@/components/shell";
-import { type PaletteKey } from "@/components/theme";
 import LibraryView from "@/views/LibraryView";
 import ManuscriptView from "@/views/ManuscriptView";
 import TimelineView from "@/views/TimelineView";
@@ -13,8 +11,6 @@ export default function ResultsPage() {
   const { jobId = "" } = useParams<{ jobId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-
-  const [palette, setPalette] = useState<PaletteKey>("manuscript");
 
   const viewParam = searchParams.get("view") as ViewKey | null;
   const view: ViewKey = viewParam ?? "manuscript";
@@ -64,7 +60,7 @@ export default function ResultsPage() {
 
   return (
     <div className="flex flex-col h-screen overflow-hidden" style={{ background: "var(--ivy-bg)" }}>
-      <TopBar palette={palette} setPalette={setPalette} manuscriptTitle={manuscriptTitle} />
+      <TopBar manuscriptTitle={manuscriptTitle} />
 
       <div className="flex flex-1 overflow-hidden">
         <Sidebar view={view} setView={setView} job={job} manuscriptTitle={manuscriptTitle} />
