@@ -3,64 +3,21 @@ import { Mono, ViewHeader } from "@/components/atoms";
 import { IconArrowRight } from "@/components/icons";
 import type { Chapter, TimelineEvent } from "@/types/graph";
 
-/* ── Spine indicator ─────────────────────────────────────────── */
-function SpineIndicator({ count, max: _max }: { count: number; max: number }) {
-  return (
-    <div className="flex items-center justify-center" style={{ width: 24, height: 36 }}>
-      <div className="relative bg-ivy-rule" style={{ width: 4, height: 36 }}>
-        {Array.from({ length: count }).map((_, i) => (
-          <div
-            key={i}
-            className="absolute left-0 right-0 bg-ivy-accent"
-            style={{
-              top:    `${(i / Math.max(count, 1)) * 100}%`,
-              height: `${Math.max(2, 100 / Math.max(count, 1) - 8)}%`,
-            }}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
+/* ── Grid template (shared between header, rows, expanded panel) ── */
+const GRID = "48px minmax(0,1fr) 140px 48px 24px";
 
-/* ── Density bars ────────────────────────────────────────────── */
-function DensityBars({ count, max }: { count: number; max: number }) {
+/* ── Event density bar ───────────────────────────────────────── */
+function DensityBar({ count, max }: { count: number; max: number }) {
+  const pct = max > 0 ? count / max : 0;
   return (
-    <div className="flex items-center gap-0.5" style={{ height: 12 }}>
-      {Array.from({ length: max }).map((_, i) => (
-        <span
-          key={i}
-          style={{
-            width: 6,
-            height: i < count ? 10 : 4,
-            background: i < count ? "var(--ivy-ink)" : "var(--ivy-rule)",
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-/* ── Chapter ribbon ──────────────────────────────────────────── */
-function ChapterRibbon({ events, totalEvents }: { events: TimelineEvent[]; totalEvents: number }) {
-  return (
-    <div className="relative" style={{ height: 28 }}>
-      <div className="absolute left-0 right-0 top-1/2 h-px bg-ivy-rule" />
-      {events.map((e) => (
+    <div className="flex items-center gap-2.5">
+      <div className="relative h-[3px] rounded-full bg-ivy-rule flex-1" style={{ minWidth: 60 }}>
         <div
-          key={e.event_id}
-          className="absolute"
-          style={{ left: `${(e.order / totalEvents) * 100}%`, top: "50%", transform: "translate(-50%, -50%)" }}
-          title={e.description}
-        >
-          <span
-            className="block h-2 w-2 rounded-full bg-ivy-accent"
-            style={{ outline: "2px solid var(--ivy-bgInk)" }}
-          />
-        </div>
-      ))}
-      <div className="absolute -bottom-1 left-0 font-mono text-[9px] text-ivy-inkFaint">order #1</div>
-      <div className="absolute -bottom-1 right-0 font-mono text-[9px] text-ivy-inkFaint">#{totalEvents}</div>
+          className="absolute left-0 top-0 h-[3px] rounded-full bg-ivy-accent transition-all"
+          style={{ width: `${pct * 100}%` }}
+        />
+      </div>
+      <Mono className="text-[11px] text-ivy-inkFaint w-3 text-right shrink-0">{count}</Mono>
     </div>
   );
 }
@@ -73,7 +30,7 @@ export default function ManuscriptView({
   chapters: Chapter[];
   events: TimelineEvent[];
 }) {
-  const [openIdx, setOpenIdx] = useState(0);
+  const [openIdx, setOpenIdx] = useState<number>(-1);
 
   const counts = chapters.map((c) =>
     events.filter((e) => e.chapter_num === c.chapter_num).length
@@ -83,28 +40,28 @@ export default function ManuscriptView({
   const totalChars = new Set(chapters.flatMap((c) => c.characters)).size;
 
   return (
-    <div className="px-10 py-8 max-w-[1100px] mx-auto">
+    <div className="px-10 py-8 max-w-[960px] mx-auto">
       <ViewHeader
         title="Manuscript"
-        subtitle={"View all chapter summaries at a glance."}
+        subtitle="Chapter-by-chapter breakdown"
         stats={[
           { v: chapters.length, l: "Chapters" },
           { v: totalEvents,     l: "Events" },
-          { v: totalChars,      l: "Named characters" },
+          { v: totalChars,      l: "Characters" },
         ]}
       />
 
-      <div className="rounded-sm border border-ivy-rule bg-ivy-bgRaised">
-        {/* Table header */}
+      <div className="rounded-sm border border-ivy-rule bg-ivy-bgRaised overflow-hidden">
+
+        {/* ── Table header ── */}
         <div
-          className="grid items-center gap-4 px-5 py-2.5 text-[10px] font-mono uppercase tracking-[0.18em] text-ivy-inkFaint border-b border-ivy-rule"
-          style={{ gridTemplateColumns: "44px 36px minmax(0,1fr) 140px 60px 60px 24px" }}
+          className="grid items-center gap-6 px-5 py-2.5 border-b border-ivy-rule
+                     text-[10px] font-mono uppercase tracking-[0.18em] text-ivy-inkFaint"
+          style={{ gridTemplateColumns: GRID }}
         >
           <span>Ch.</span>
-          <span />
           <span>Title</span>
-          <span>Event density</span>
-          <span className="text-right">Events</span>
+          <span>Events</span>
           <span className="text-right">Char.</span>
           <span />
         </div>
@@ -114,90 +71,140 @@ export default function ManuscriptView({
             .filter((e) => e.chapter_num === c.chapter_num)
             .sort((a, b) => a.order - b.order);
           const open = openIdx === i;
+          const isLast = i === chapters.length - 1;
+
           return (
             <div
               key={c.chapter_num}
-              style={{ borderBottom: i < chapters.length - 1 ? "1px solid var(--ivy-ruleSoft)" : "none" }}
+              style={{
+                borderBottom: isLast ? "none" : "1px solid var(--ivy-ruleSoft)",
+                borderLeft: open ? "3px solid var(--ivy-accent)" : "3px solid transparent",
+                transition: "border-left-color 150ms ease",
+              }}
             >
+              {/* ── Collapsed row ── */}
               <button
                 onClick={() => setOpenIdx(open ? -1 : i)}
-                className="grid items-center gap-4 w-full px-5 py-3.5 text-left transition-colors"
+                className="grid items-center gap-6 w-full px-5 py-3.5 text-left
+                           transition-colors hover:bg-ivy-bgInk"
                 style={{
-                  gridTemplateColumns: "44px 36px minmax(0,1fr) 140px 60px 60px 24px",
+                  gridTemplateColumns: GRID,
                   background: open ? "var(--ivy-bgInk)" : "transparent",
                 }}
               >
                 <Mono className="text-[12px] text-ivy-inkMute">
                   {String(c.chapter_num).padStart(2, "0")}
                 </Mono>
-                <SpineIndicator count={ce.length} max={maxCount} />
-                <div className="min-w-0">
-                  <p className="font-serif text-[15px] truncate text-ivy-inkDeep">{c.chapter_title}</p>
-                  <p className="text-[12px] truncate text-ivy-inkMute">{c.summary[0]}</p>
-                </div>
-                <DensityBars count={ce.length} max={maxCount} />
-                <Mono className="text-[12px] text-right text-ivy-ink">{ce.length}</Mono>
-                <Mono className="text-[12px] text-right text-ivy-ink">{c.characters.length}</Mono>
+
+                <p className="font-serif text-[15px] truncate text-ivy-inkDeep leading-snug">
+                  {c.chapter_title}
+                </p>
+
+                <DensityBar count={ce.length} max={maxCount} />
+
+                <Mono className="text-[12px] text-right text-ivy-inkMute">
+                  {c.characters.length}
+                </Mono>
+
                 <span
-                  className="text-ivy-inkFaint transition-transform duration-200"
+                  className="flex justify-center text-ivy-inkFaint transition-transform duration-200"
                   style={{ transform: open ? "rotate(90deg)" : "none" }}
                 >
                   <IconArrowRight />
                 </span>
               </button>
 
+              {/* ── Expanded panel ── */}
               {open && (
                 <div
-                  className="grid grid-cols-12 gap-8 px-5 pt-1 pb-6"
-                  style={{ background: "var(--ivy-bgInk)" }}
+                  className="grid gap-6 px-5 pt-5 pb-6"
+                  style={{
+                    gridTemplateColumns: GRID,
+                    background: "var(--ivy-bgInk)",
+                    borderTop: "1px solid var(--ivy-ruleSoft)",
+                  }}
                 >
-                  <div className="col-span-7">
-                    <p className="font-mono text-[10px] uppercase tracking-[0.22em] mb-2 text-ivy-inkFaint">
-                      summary
-                    </p>
-                    <ul className="space-y-2 mb-5">
-                      {c.summary.map((s, k) => (
-                        <li key={k} className="flex gap-3 text-[14px] leading-relaxed text-ivy-ink">
-                          <Mono className="text-ivy-inkFaint">{String(k + 1).padStart(2, "0")}</Mono>
-                          <span>{s}</span>
-                        </li>
-                      ))}
-                    </ul>
-                    <p className="font-mono text-[10px] uppercase tracking-[0.22em] mb-2 text-ivy-inkFaint">
-                      key events
-                    </p>
-                    <ol className="space-y-1.5">
-                      {c.key_events.map((ev, k) => (
-                        <li key={k} className="flex items-baseline gap-3 text-[13px] text-ivy-ink">
-                          <Mono className="text-ivy-accent">{ce[k]?.event_id ?? "—"}</Mono>
-                          <span>{ev}</span>
-                        </li>
-                      ))}
-                    </ol>
-                  </div>
-                  <div className="col-span-5 space-y-4">
-                    <div>
-                      <p className="font-mono text-[10px] uppercase tracking-[0.22em] mb-2 text-ivy-inkFaint">
-                        characters
-                      </p>
-                      <div className="flex flex-wrap gap-1.5">
-                        {c.characters.map((name) => (
-                          <span
-                            key={name}
-                            className="text-[12px] px-2 py-0.5 rounded-sm border border-ivy-rule text-ivy-ink"
-                          >
-                            {name}
-                          </span>
-                        ))}
+                  {/* Spacer: aligns content under Title column */}
+                  <div />
+
+                  {/* Summary + Key events */}
+                  <div className="min-w-0 space-y-6">
+
+                    {c.summary.length > 0 && (
+                      <div>
+                        <p className="font-mono text-[10px] uppercase tracking-[0.22em] mb-3 text-ivy-inkFaint">
+                          Summary
+                        </p>
+                        <ul className="space-y-2.5">
+                          {c.summary.map((s, k) => (
+                            <li key={k} className="flex gap-3">
+                              <span
+                                className="mt-[7px] h-1.5 w-1.5 rounded-full shrink-0"
+                                style={{ background: "var(--ivy-accentSoft)", border: "1px solid var(--ivy-accent)" }}
+                              />
+                              <span className="text-[13px] leading-relaxed text-ivy-ink">{s}</span>
+                            </li>
+                          ))}
+                        </ul>
                       </div>
-                    </div>
-                    <div>
-                      <p className="font-mono text-[10px] uppercase tracking-[0.22em] mb-2 text-ivy-inkFaint">
-                        chronology contribution
-                      </p>
-                      <ChapterRibbon events={ce} totalEvents={totalEvents} />
+                    )}
+
+                    {c.key_events.length > 0 && (
+                      <div>
+                        <p className="font-mono text-[10px] uppercase tracking-[0.22em] mb-3 text-ivy-inkFaint">
+                          Key events
+                          <span className="ml-2 text-ivy-inkFaint opacity-60">· {c.key_events.length}</span>
+                        </p>
+                        <ol
+                          className="space-y-0 rounded-sm overflow-hidden"
+                          style={{ border: "1px solid var(--ivy-ruleSoft)" }}
+                        >
+                          {c.key_events.map((ev, k) => (
+                            <li
+                              key={k}
+                              className="flex gap-3 px-3 py-2.5 text-[13px] text-ivy-ink"
+                              style={{
+                                borderBottom: k < c.key_events.length - 1 ? "1px solid var(--ivy-ruleSoft)" : "none",
+                                background: k % 2 === 0 ? "transparent" : "color-mix(in oklch, var(--ivy-rule) 20%, transparent)",
+                              }}
+                            >
+                              <Mono className="text-[11px] text-ivy-accent shrink-0 mt-px w-4">
+                                {k + 1}
+                              </Mono>
+                              <span className="leading-relaxed">{ev}</span>
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Characters — spans events + char cols */}
+                  <div style={{ gridColumn: "3 / 5" }}>
+                    <p className="font-mono text-[10px] uppercase tracking-[0.22em] mb-3 text-ivy-inkFaint">
+                      Characters
+                      {c.characters.length > 0 && (
+                        <span className="ml-2 opacity-60">· {c.characters.length}</span>
+                      )}
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {c.characters.map((name) => (
+                        <span
+                          key={name}
+                          className="text-[12px] px-2 py-0.5 rounded-sm text-ivy-ink"
+                          style={{ border: "1px solid var(--ivy-rule)", background: "var(--ivy-bgRaised)" }}
+                        >
+                          {name}
+                        </span>
+                      ))}
+                      {c.characters.length === 0 && (
+                        <span className="text-[12px] text-ivy-inkFaint italic">None recorded</span>
+                      )}
                     </div>
                   </div>
+
+                  {/* Arrow col spacer */}
+                  <div />
                 </div>
               )}
             </div>
