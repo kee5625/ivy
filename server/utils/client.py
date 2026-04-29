@@ -10,6 +10,7 @@ from openai import OpenAI
 logger = logging.getLogger(__name__)
 
 MODEL = "gpt-4o-mini"
+PLOT_HOLE_MODEL = "gpt-4o"   # plot hole detection needs deeper reasoning
 MAX_CHAPTER_CHARS = 15_000
 
 _JSON_FENCE = re.compile(r"```(?:json)?\s*([\s\S]*?)```", re.IGNORECASE)
@@ -93,20 +94,26 @@ def plot_holes_chat_completion(
     client = get_client()
 
     prompt = (
-        "You are a conservative fiction continuity analyst.\n"
-        "Review the structured story state and return only high-signal plot holes that are directly supported by the provided evidence.\n\n"
-        "Allowed hole types:\n"
-        "- timeline_paradox: chronology or causality contradicts itself.\n"
-        "- location_conflict: the same person or event is placed in incompatible locations at the same time.\n"
-        "- dead_character_speaks: a character appears active after a supported death/absence contradiction.\n"
-        "- unresolved_setup: the story strongly sets up a concrete thread that remains unresolved by the end of the provided material.\n\n"
-        "Rules:\n"
-        "1) Be conservative. Return fewer findings rather than speculative ones.\n"
-        "2) Return zero findings if the evidence is ambiguous.\n"
-        "3) Use only the provided chapters, timeline events, and entities.\n"
-        "4) Keep descriptions concise and evidence-based. Mention the contradiction or unresolved setup explicitly.\n"
-        "5) `confidence` must reflect how explicit the support is, from 0.0 to 1.0.\n"
-        "6) Only use event ids and chapter numbers that exist in the input.\n\n"
+        "You are a meticulous fiction continuity analyst. Your job is to find ALL types of "
+        "inconsistencies, plot holes, logic gaps, and continuity errors in the story data below.\n\n"
+        "HOLE TYPES — use these exact strings:\n"
+        "- timeline_paradox        : dates, timing, or causality contradicts itself\n"
+        "- location_conflict       : same person/event in incompatible locations at same time\n"
+        "- dead_character_speaks   : character active after established death or disappearance\n"
+        "- unresolved_setup        : explicit setup (foreshadowing, promise, chekhov gun) never resolved\n"
+        "- factual_error           : real-world fact is wrong (biology, physics, math, prices, anatomy)\n"
+        "- character_inconsistency : character acts against their established knowledge, memory, or traits\n"
+        "- logic_gap               : story logic breaks — easy solution ignored, motivation absent, stakes don't add up\n"
+        "- world_inconsistency     : established world rule or lore violated without explanation\n\n"
+        "INSTRUCTIONS:\n"
+        "1. Be THOROUGH. Flag everything suspicious. It is better to over-report than under-report.\n"
+        "2. Do NOT refuse to flag something because it might have an in-universe explanation — "
+        "flag it and use a lower confidence score instead.\n"
+        "3. Cross-reference chapters explicitly: if a fact in chapter 3 contradicts chapter 7, flag it.\n"
+        "4. Pay close attention to `raw_text_excerpt` fields — these contain actual quoted text with "
+        "specific details (prices, physical descriptions, dates, dialogue) that reveal factual errors.\n"
+        "5. `confidence` range: 0.5 = plausible issue, 0.75 = likely issue, 0.9+ = clear contradiction.\n"
+        "6. `chapters_involved` and `events_involved` must only contain values present in the input.\n\n"
         'Respond in JSON: {"findings": [{"hole_type": ..., "severity": ..., "description": ..., '
         '"chapters_involved": [...], "characters_involved": [...], "events_involved": [...], "confidence": ...}]}\n\n'
         f"Story state:\n{json.dumps(story_state, ensure_ascii=False)}"
@@ -115,10 +122,10 @@ def plot_holes_chat_completion(
     t0 = time.perf_counter()
     response = client.chat.completions.create(
         messages=[{"role": "user", "content": prompt}],
-        model=model_name or MODEL,
+        model=model_name or PLOT_HOLE_MODEL,
         response_format=_JSON_RESPONSE_FORMAT,
     )
-    _log_llm_call("plot_holes", model_name or MODEL, len(prompt), t0, response.usage)
+    _log_llm_call("plot_holes", model_name or PLOT_HOLE_MODEL, len(prompt), t0, response.usage)
 
     parsed = _parse_json(response.choices[0].message.content)
 

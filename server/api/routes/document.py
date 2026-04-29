@@ -18,7 +18,7 @@ from db.repository import (
     PlotHoleRepository,
     TimelineRepository,
 )
-from utils.job import get_job_status
+from utils.job import get_job_status, set_job_status
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["document"])
@@ -191,3 +191,54 @@ async def get_plot_holes(job_id: str) -> dict:
         raise HTTPException(status_code=404, detail="Job not found")
     holes = await PlotHoleRepository.get_by_job(job_id)
     return {"plot_holes": [_serialize_hole(h) for h in holes]}
+
+
+@router.post("/{job_id}/rerun-plot-holes")
+async def rerun_plot_holes(job_id: str) -> dict:
+    """Re-run only the plot hole agent against already-ingested data.
+
+    Useful when the agent code/prompt changes but the book hasn't changed —
+    skips the 10-minute ingestion + timeline pipeline.
+    """
+    from agents.plot_hole_agent import plot_hole_agent
+
+    db_job = await JobRepository.get(job_id)
+    if db_job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    # Verify prerequisite data exists
+    chapters = await ChapterRepository.get_by_job(job_id)
+    if not chapters:
+        raise HTTPException(
+            status_code=422,
+            detail="No chapter data found — run the full pipeline first",
+        )
+    events = await TimelineRepository.get_by_job(job_id)
+    if not events:
+        raise HTTPException(
+            status_code=422,
+            detail="No timeline data found — run the full pipeline first",
+        )
+
+    # Clear stale plot holes
+    deleted = await PlotHoleRepository.delete_by_job(job_id)
+    logger.info("[API] rerun_plot_holes job=%s cleared %d stale holes", job_id, deleted)
+
+    # Reset status so the agent can write new results
+    await JobRepository.update_status(job_id, "timeline_complete")
+    await set_job_status(
+        job_id,
+        status="timeline_complete",
+        current_agent=None,
+        completed_agents=["ingestion_agent", "timeline_agent"],
+    )
+
+    async def _run_plot_holes() -> None:
+        try:
+            await plot_hole_agent.ainvoke({"job_id": job_id})
+        except Exception:
+            logger.exception("[API] rerun_plot_holes job=%s failed", job_id)
+
+    asyncio.create_task(_run_plot_holes())
+    logger.info("[API] rerun_plot_holes job=%s dispatched", job_id)
+    return {"job_id": job_id, "status": "plot_hole_in_progress"}
