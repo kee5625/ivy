@@ -25,8 +25,13 @@ export default function ResultsPage() {
 
   const { job, chapters, timelineEvents, plotHoles, isLoading, error } = useJobResults(jobId);
 
-  // Derive a nice title from the job filename if available
-  const manuscriptTitle = jobId;
+  // Look up friendly name saved at upload time
+  const manuscriptTitle = (() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem("ivy-recent-jobs") ?? "[]") as { id: string; name: string }[];
+      return raw.find((j) => j.id === jobId)?.name ?? "";
+    } catch { return ""; }
+  })();
 
   if (isLoading) {
     return (

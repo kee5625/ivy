@@ -16,19 +16,22 @@ function stageIndex(status: string): number {
   return -1;
 }
 
+function getJobName(id: string): string {
+  try {
+    const raw = JSON.parse(localStorage.getItem("ivy-recent-jobs") ?? "[]") as { id: string; name: string }[];
+    return raw.find((j) => j.id === id)?.name ?? "";
+  } catch {
+    return "";
+  }
+}
+
 export default function GraphPage() {
   const { jobId = "" } = useParams<{ jobId: string }>();
   const { job, isLoading, error } = useJobPolling(jobId);
   const navigate = useNavigate();
+  const manuscriptName = getJobName(jobId);
 
-  // Save to recent jobs
-  useEffect(() => {
-    if (!jobId) return;
-    const prev: string[] = JSON.parse(localStorage.getItem("ivy-recent-jobs") ?? "[]") as string[];
-    if (!prev.includes(jobId)) {
-      localStorage.setItem("ivy-recent-jobs", JSON.stringify([jobId, ...prev].slice(0, 20)));
-    }
-  }, [jobId]);
+  // Recent job already saved by LibraryView at upload time — nothing to do here
 
   // Redirect when done
   useEffect(() => {
@@ -63,9 +66,15 @@ export default function GraphPage() {
         <p className="font-mono text-[10px] uppercase tracking-[0.28em] mb-2 text-center" style={{ color: "var(--ivy-inkFaint)" }}>
           analysing manuscript
         </p>
-        <h2 className="font-serif text-[28px] text-center mb-8" style={{ color: "var(--ivy-inkDeep)" }}>
-          {isLoading ? "Starting…" : failed ? "Pipeline failed" : "Running pipeline"}
+        <h2 className="font-serif text-[28px] text-center mb-1" style={{ color: "var(--ivy-inkDeep)" }}>
+          {manuscriptName || (isLoading ? "Starting…" : failed ? "Pipeline failed" : "Running pipeline")}
         </h2>
+        {manuscriptName && (
+          <p className="font-mono text-[12px] text-center mb-8" style={{ color: "var(--ivy-inkMute)" }}>
+            {isLoading ? "starting…" : failed ? "pipeline failed" : "running pipeline"}
+          </p>
+        )}
+        {!manuscriptName && <div className="mb-8" />}
 
         {/* Pipeline steps */}
         <div
@@ -126,10 +135,6 @@ export default function GraphPage() {
           })}
         </div>
 
-        {/* Job ID */}
-        <p className="mt-6 text-center font-mono text-[11px]" style={{ color: "var(--ivy-inkFaint)" }}>
-          job <span style={{ color: "var(--ivy-inkMute)" }}>{jobId}</span>
-        </p>
 
         {/* Error */}
         {(error ?? (failed && job?.error)) && (

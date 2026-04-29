@@ -4,6 +4,26 @@ import { uploadPdfDirectToR2, createJob } from "@/api/upload";
 import { IconUpload, IconArrowRight } from "@/components/icons";
 import { Mono } from "@/components/atoms";
 
+/* ── Recent jobs storage ─────────────────────────────────────── */
+type RecentJob = { id: string; name: string };
+
+function getRecentJobs(): RecentJob[] {
+  try {
+    const raw = JSON.parse(localStorage.getItem("ivy-recent-jobs") ?? "[]") as unknown[];
+    return raw
+      .map((entry) => {
+        // Handle legacy format where entries were plain strings (job IDs)
+        if (typeof entry === "string") return { id: entry, name: entry };
+        if (typeof entry === "object" && entry !== null && "id" in entry)
+          return entry as RecentJob;
+        return null;
+      })
+      .filter((e): e is RecentJob => e !== null);
+  } catch {
+    return [];
+  }
+}
+
 /* ── Status pill ─────────────────────────────────────────────── */
 const STATUS_MAP: Record<string, { label: string; accent: boolean }> = {
   complete:                { label: "Complete",       accent: false },
@@ -91,6 +111,15 @@ export default function LibraryView() {
     try {
       const { objectKey } = await uploadPdfDirectToR2(file);
       const jobId = await createJob(file.name, objectKey);
+      // Persist {id, name} so library can display book title instead of UUID
+      const displayName = file.name.replace(/\.pdf$/i, "").replace(/[_-]/g, " ");
+      const prev = getRecentJobs();
+      if (!prev.find((j) => j.id === jobId)) {
+        localStorage.setItem(
+          "ivy-recent-jobs",
+          JSON.stringify([{ id: jobId, name: displayName }, ...prev].slice(0, 20)),
+        );
+      }
       navigate(`/graph/${jobId}`);
     } catch (err) {
       alert(err instanceof Error ? err.message : "Upload failed");
@@ -112,8 +141,8 @@ export default function LibraryView() {
     if (file) void handleFile(file);
   }
 
-  // Recent jobs from localStorage
-  const recentIds: string[] = JSON.parse(localStorage.getItem("ivy-recent-jobs") ?? "[]") as string[];
+  // Recent jobs from localStorage — stored as {id, name}[]
+  const recentJobs = getRecentJobs();
 
   return (
     <div className="px-10 py-10 max-w-[1100px] mx-auto">
@@ -190,12 +219,12 @@ export default function LibraryView() {
       </section>
 
       {/* Recent jobs */}
-      {recentIds.length > 0 && (
+      {recentJobs.length > 0 && (
         <section>
           <div className="flex items-baseline justify-between mb-4">
             <h3 className="font-serif text-[20px] tracking-tight text-ivy-inkDeep">Recent analyses</h3>
             <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-ivy-inkFaint">
-              {recentIds.length} on file
+              {recentJobs.length} on file
             </span>
           </div>
           <div className="rounded-sm border border-ivy-rule bg-ivy-bgRaised">
@@ -204,27 +233,27 @@ export default function LibraryView() {
               style={{ gridTemplateColumns: "40px minmax(0,1fr) 120px 24px" }}
             >
               <span>#</span>
-              <span>Job ID</span>
+              <span>Manuscript</span>
               <span>Status</span>
               <span />
             </div>
-            {recentIds.map((id, i) => (
+            {recentJobs.map((job, i) => (
               <button
-                key={id}
-                onClick={() => navigate(`/results/${id}`)}
-                onMouseEnter={() => setHover(id)}
+                key={job.id}
+                onClick={() => navigate(`/results/${job.id}`)}
+                onMouseEnter={() => setHover(job.id)}
                 onMouseLeave={() => setHover(null)}
                 className="grid items-center gap-4 w-full px-5 py-3.5 text-left"
                 style={{
                   gridTemplateColumns: "40px minmax(0,1fr) 120px 24px",
-                  borderBottom: i < recentIds.length - 1 ? "1px solid var(--ivy-ruleSoft)" : "none",
-                  background: hover === id ? "var(--ivy-bgInk)" : "transparent",
+                  borderBottom: i < recentJobs.length - 1 ? "1px solid var(--ivy-ruleSoft)" : "none",
+                  background: hover === job.id ? "var(--ivy-bgInk)" : "transparent",
                 }}
               >
                 <Mono className="text-[11px] text-ivy-inkFaint">{String(i + 1).padStart(2, "0")}</Mono>
-                <span className="font-mono text-[13px] truncate text-ivy-inkDeep">{id}</span>
+                <span className="font-serif text-[15px] truncate text-ivy-inkDeep">{job.name}</span>
                 <StatusPill status="complete" />
-                <span style={{ color: hover === id ? "var(--ivy-accent)" : "var(--ivy-inkFaint)" }}>
+                <span style={{ color: hover === job.id ? "var(--ivy-accent)" : "var(--ivy-inkFaint)" }}>
                   <IconArrowRight />
                 </span>
               </button>
@@ -233,7 +262,7 @@ export default function LibraryView() {
         </section>
       )}
 
-      {recentIds.length === 0 && (
+      {recentJobs.length === 0 && (
         <div className="mt-4 text-center py-12 rounded-sm border border-ivy-ruleSoft">
           <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-ivy-inkFaint">
             No manuscripts analysed yet
