@@ -214,7 +214,6 @@ export default function CharactersView({ events }: { events: TimelineEvent[] }) 
   return (
     <div className="px-10 py-8 max-w-[1300px] mx-auto">
       <ViewHeader
-        kicker="Character network"
         title="Characters"
         subtitle="Co-occurrence graph derived from scene-level presence"
         stats={[

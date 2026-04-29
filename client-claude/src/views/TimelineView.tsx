@@ -191,7 +191,6 @@ export default function TimelineView({ events: rawEvents }: { events: TimelineEv
   return (
     <div className="px-10 py-8 max-w-[1400px] mx-auto">
       <ViewHeader
-        kicker="Story chronology"
         title="Timeline"
         subtitle={`Merged from ${new Set(events.map(e => e.chapter_num)).size} chapters into ${events.length} globally ordered events`}
         stats={[

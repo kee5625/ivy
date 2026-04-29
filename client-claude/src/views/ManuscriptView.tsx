@@ -85,7 +85,6 @@ export default function ManuscriptView({
   return (
     <div className="px-10 py-8 max-w-[1100px] mx-auto">
       <ViewHeader
-        kicker="Chapter index"
         title="Manuscript"
         subtitle={`${chapters.length} chapters · ${totalEvents} events`}
         stats={[

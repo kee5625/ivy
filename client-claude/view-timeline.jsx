@@ -56,7 +56,6 @@ function TimelineView() {
   return (
     <div className="px-10 py-8 max-w-[1400px] mx-auto">
       <ViewHeader
-        kicker="Story chronology"
         title="Timeline"
         subtitle="Merged from 10 chapters into 19 globally ordered events"
         stats={[

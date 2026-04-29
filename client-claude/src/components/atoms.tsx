@@ -26,9 +26,8 @@ export function SevDot({ level }: { level: string }) {
 type Stat = { v: number | string; l: string };
 
 export function ViewHeader({
-  kicker, title, subtitle, stats,
+  title, subtitle, stats,
 }: {
-  kicker: string;
   title: string;
   subtitle?: string;
   stats?: Stat[];
@@ -36,9 +35,6 @@ export function ViewHeader({
   return (
     <div className="mb-8">
       <div className="mb-6">
-        <p className="font-mono text-[10px] uppercase tracking-[0.28em] mb-2 text-ivy-inkFaint">
-          <span className="text-ivy-accent">—</span> {kicker}
-        </p>
         <h1 className="font-serif text-[40px] leading-none tracking-tight text-ivy-inkDeep">
           {title}
         </h1>

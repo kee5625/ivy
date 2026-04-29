@@ -15,7 +15,6 @@ function IssuesView() {
   return (
     <div className="px-10 py-8 max-w-[1300px] mx-auto">
       <ViewHeader
-        kicker="Inconsistencies"
         title="Issues"
         subtitle="Cross-referenced contradictions, unresolved setups, and temporal paradoxes"
         stats={[

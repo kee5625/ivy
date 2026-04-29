@@ -261,7 +261,7 @@ export default function IssuesView({
   if (holes.length === 0) {
     return (
       <div className="px-10 py-8">
-        <ViewHeader kicker="Inconsistencies" title="Issues" />
+        <ViewHeader title="Issues" />
         <p className="text-ivy-inkMute text-[14px]">No issues found.</p>
       </div>
     );
@@ -270,7 +270,6 @@ export default function IssuesView({
   return (
     <div className="px-10 py-8 max-w-[1300px] mx-auto">
       <ViewHeader
-        kicker="Inconsistencies"
         title="Issues"
         subtitle="Cross-referenced contradictions, unresolved setups, and temporal paradoxes"
         stats={[

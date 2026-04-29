@@ -15,7 +15,6 @@ function ManuscriptView() {
   return (
     <div className="px-10 py-8 max-w-[1100px] mx-auto">
       <ViewHeader
-        kicker="Chapter index"
         title="The Saltcombe Letter"
         subtitle="K. Vinter · 312 pages · 10 chapters"
         stats={[
@@ -168,14 +167,11 @@ function ChapterRibbon({ events, totalEvents }) {
   );
 }
 
-function ViewHeader({ kicker, title, subtitle, stats }) {
+function ViewHeader({ title, subtitle, stats }) {
   return (
     <div className="mb-8">
       <div className="flex items-end justify-between mb-6">
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.28em] mb-2" style={{ color: "var(--ivy-inkFaint)" }}>
-            <span style={{ color: "var(--ivy-accent)" }}>—</span> {kicker}
-          </p>
           <h1 className="font-serif text-[40px] leading-none tracking-tight" style={{ color: "var(--ivy-inkDeep)" }}>
             {title}
           </h1>
