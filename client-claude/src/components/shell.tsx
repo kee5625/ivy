@@ -1,10 +1,5 @@
 import { Hairline } from "@/components/atoms";
 import {
-  IVY_PALETTES,
-  applyPalette,
-  type PaletteKey,
-} from "@/components/theme";
-import {
   IconLibrary,
   IconManuscript,
   IconTimeline,
@@ -25,20 +20,7 @@ const NAV: { key: ViewKey; label: string; Icon: React.ComponentType }[] = [
 ];
 
 /* ── TopBar ──────────────────────────────────────────────────── */
-export function TopBar({
-  palette,
-  setPalette,
-  manuscriptTitle,
-}: {
-  palette: PaletteKey;
-  setPalette: (k: PaletteKey) => void;
-  manuscriptTitle?: string;
-}) {
-  function handlePalette(k: PaletteKey) {
-    setPalette(k);
-    applyPalette(k);
-  }
-
+export function TopBar({ manuscriptTitle }: { manuscriptTitle?: string }) {
   return (
     <header className="flex items-center justify-between px-6 h-14 border-b border-ivy-rule bg-ivy-bgRaised shrink-0">
       <div className="flex items-center gap-3">
@@ -56,32 +38,13 @@ export function TopBar({
         </span>
       </div>
 
-      <div className="flex items-center gap-4">
-        <span className="text-[12px] text-ivy-inkMute">
-          {manuscriptTitle ? (
-            <>Working on <em className="not-italic text-ivy-inkDeep">{manuscriptTitle}</em></>
-          ) : (
-            "No manuscript open"
-          )}
-        </span>
-
-        {/* Palette switcher */}
-        <div className="flex items-center gap-1 px-2 py-1 rounded-sm border border-ivy-rule">
-          {(Object.keys(IVY_PALETTES) as PaletteKey[]).map((k) => (
-            <button
-              key={k}
-              onClick={() => handlePalette(k)}
-              title={IVY_PALETTES[k].label}
-              className="h-4 w-4 rounded-full transition-[outline]"
-              style={{
-                background: IVY_PALETTES[k].accent,
-                outline: palette === k ? "2px solid var(--ivy-ink)" : "2px solid transparent",
-                outlineOffset: 1,
-              }}
-            />
-          ))}
-        </div>
-      </div>
+      <span className="text-[12px] text-ivy-inkMute">
+        {manuscriptTitle ? (
+          <>Working on <em className="not-italic text-ivy-inkDeep">{manuscriptTitle}</em></>
+        ) : (
+          "No manuscript open"
+        )}
+      </span>
     </header>
   );
 }
