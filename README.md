@@ -184,11 +184,6 @@ ivy/
 
 ---
 
-## Contributing
-
-
----
-
 ## License
 
 MIT
