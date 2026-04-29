@@ -86,7 +86,7 @@ export default function ManuscriptView({
     <div className="px-10 py-8 max-w-[1100px] mx-auto">
       <ViewHeader
         title="Manuscript"
-        subtitle={`${chapters.length} chapters · ${totalEvents} events`}
+        subtitle={"View all chapter summaries at a glance."}
         stats={[
           { v: chapters.length, l: "Chapters" },
           { v: totalEvents,     l: "Events" },

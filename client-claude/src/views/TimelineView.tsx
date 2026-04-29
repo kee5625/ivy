@@ -192,7 +192,7 @@ export default function TimelineView({ events: rawEvents }: { events: TimelineEv
     <div className="px-10 py-8 max-w-[1400px] mx-auto">
       <ViewHeader
         title="Timeline"
-        subtitle={`Merged from ${new Set(events.map(e => e.chapter_num)).size} chapters into ${events.length} globally ordered events`}
+        subtitle="A visual representation of your story."
         stats={[
           { v: events.length, l: "Events" },
           { v: events.filter((e) => e.causes.length || e.caused_by.length).length, l: "Linked" },
