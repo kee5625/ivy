@@ -101,6 +101,7 @@ export default function LibraryView() {
   const [drag, setDrag] = useState(false);
   const [hover, setHover] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [recentJobs, setRecentJobs] = useState<RecentJob[]>(getRecentJobs());
   const inflightRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -114,12 +115,12 @@ export default function LibraryView() {
       // Persist {id, name} so library can display book title instead of UUID
       const displayName = file.name.replace(/\.pdf$/i, "").replace(/[_-]/g, " ");
       const prev = getRecentJobs();
+      let next = prev;
       if (!prev.find((j) => j.id === jobId)) {
-        localStorage.setItem(
-          "ivy-recent-jobs",
-          JSON.stringify([{ id: jobId, name: displayName }, ...prev].slice(0, 20)),
-        );
+        next = [{ id: jobId, name: displayName }, ...prev].slice(0, 20);
+        localStorage.setItem("ivy-recent-jobs", JSON.stringify(next));
       }
+      setRecentJobs(next);
       navigate(`/graph/${jobId}`);
     } catch (err) {
       alert(err instanceof Error ? err.message : "Upload failed");
@@ -141,8 +142,10 @@ export default function LibraryView() {
     if (file) void handleFile(file);
   }
 
-  // Recent jobs from localStorage — stored as {id, name}[]
-  const recentJobs = getRecentJobs();
+  function clearRecentJobs() {
+    localStorage.removeItem("ivy-recent-jobs");
+    setRecentJobs([]);
+  }
 
   return (
     <div className="px-10 py-10 max-w-[1100px] mx-auto">
@@ -223,9 +226,14 @@ export default function LibraryView() {
         <section>
           <div className="flex items-baseline justify-between mb-4">
             <h3 className="font-serif text-[20px] tracking-tight text-ivy-inkDeep">Recent analyses</h3>
-            <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-ivy-inkFaint">
-              {recentJobs.length} on file
-            </span>
+            <div className="flex items-center gap-4">
+              <button
+                onClick={clearRecentJobs}
+                className="text-[11px] uppercase tracking-[0.18em] text-ivy-inkMute border border-ivy-ruleSoft px-2 py-1 rounded-sm"
+              >
+                Clear list
+              </button>
+            </div>
           </div>
           <div className="rounded-sm border border-ivy-rule bg-ivy-bgRaised">
             <div
