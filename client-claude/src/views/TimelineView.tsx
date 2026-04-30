@@ -134,37 +134,6 @@ function EventDetail({
   );
 }
 
-/* ── Legend ───────────────────────────────────────────────────── */
-function TimelineLegend() {
-  return (
-    <div className="rounded-sm p-4 border border-ivy-rule bg-ivy-bgRaised">
-      <p className="font-mono text-[10px] uppercase tracking-[0.22em] mb-3 text-ivy-inkFaint">legend</p>
-      <ul className="space-y-2 text-[12px] text-ivy-ink">
-        <li className="flex items-center gap-2.5">
-          <svg width="20" height="14"><line x1="0" y1="7" x2="20" y2="7" stroke="var(--ivy-inkDeep)" strokeWidth="1.4" /></svg>
-          <span>Spine — story order (left → right)</span>
-        </li>
-        <li className="flex items-center gap-2.5">
-          <svg width="20" height="14">
-            <line x1="10" y1="0" x2="10" y2="14" stroke="var(--ivy-inkMute)" strokeWidth="1" />
-            <circle cx="10" cy="0" r="3" fill="var(--ivy-bgRaised)" stroke="var(--ivy-inkDeep)" />
-          </svg>
-          <span>Rib length shows how tangled a beat is</span>
-        </li>
-        <li className="flex items-center gap-2.5">
-          <svg width="20" height="14">
-            <path d="M2 7 Q10 14 18 7" fill="none" stroke="var(--ivy-rule)" strokeWidth="0.8" />
-          </svg>
-          <span>Curves trace cause-and-effect links</span>
-        </li>
-        <li className="flex items-center gap-2.5">
-          <span className="inline-block h-2 w-2 rounded-full bg-ivy-accent" />
-          <span>Selected beat</span>
-        </li>
-      </ul>
-    </div>
-  );
-}
 
 /* ── Timeline view ────────────────────────────────────────────── */
 export default function TimelineView({ events: rawEvents }: { events: TimelineEvent[] }) {
@@ -257,8 +226,7 @@ export default function TimelineView({ events: rawEvents }: { events: TimelineEv
           )}
         </div>
         <div className="col-span-4">
-          <TimelineLegend />
-          <div className="mt-4">
+          <div className="">
             <p className="font-mono text-[10px] uppercase tracking-[0.22em] mb-3 text-ivy-inkFaint">beats</p>
             <div className="space-y-2">
               {events.map((e) => {
