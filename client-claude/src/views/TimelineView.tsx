@@ -123,95 +123,64 @@ function EventDetail({
           )}
         </DetailField>
         <DetailField label="Where">{event.location ?? "—"}</DetailField>
-        <div className="space-y-4">
-          <DetailField label="Who">
-            {uniqueCharacters.length === 0 ? (
-              <span className="text-ivy-inkFaint">—</span>
-            ) : (
-              <div className="flex flex-wrap gap-1 mt-0.5">
-                {uniqueCharacters.map((c) => (
-                  <span key={c} className="text-[12px] px-1.5 py-0.5 rounded-sm border border-ivy-rule">
-                    {c}
-                  </span>
-                ))}
-              </div>
-            )}
-          </DetailField>
-          <DetailField label={`Caused by (${causedByEvents.length})`}>
-            {causedByEvents.length === 0 ? (
-              <span className="text-ivy-inkFaint">No earlier beats referenced</span>
-            ) : (
-              <div className="space-y-2">
-                {causedByEvents.map((e) => (
-                  <button
-                    key={e.event_id}
-                    onClick={() => onSelectEvent?.(e.event_id)}
-                    className="w-full text-left rounded-sm border border-ivy-ruleSoft px-2 py-1.5 hover:bg-ivy-bgInk"
-                  >
-                    <div className="text-[12px] text-ivy-inkDeep leading-snug">{e.description}</div>
-                    <Mono className="text-[10px] text-ivy-inkFaint mt-1">
-                      {formatBeatLabel(e.order)} · {formatChapterLabel(e.chapter_num)}
-                    </Mono>
-                  </button>
-                ))}
-              </div>
-            )}
-          </DetailField>
-          <DetailField label={`Leads to (${causesEvents.length})`}>
-            {causesEvents.length === 0 ? (
-              <span className="text-ivy-inkFaint">No later beats referenced</span>
-            ) : (
-              <div className="space-y-2">
-                {causesEvents.map((e) => (
-                  <button
-                    key={e.event_id}
-                    onClick={() => onSelectEvent?.(e.event_id)}
-                    className="w-full text-left rounded-sm border border-ivy-ruleSoft px-2 py-1.5 hover:bg-ivy-bgInk"
-                  >
-                    <div className="text-[12px] text-ivy-inkDeep leading-snug">{e.description}</div>
-                    <Mono className="text-[10px] text-ivy-inkFaint mt-1">
-                      {formatBeatLabel(e.order)} · {formatChapterLabel(e.chapter_num)}
-                    </Mono>
-                  </button>
-                ))}
-              </div>
-            )}
-          </DetailField>
-        </div>
+        <DetailField label="Who">
+          {uniqueCharacters.length === 0 ? (
+            <span className="text-ivy-inkFaint">—</span>
+          ) : (
+            <div className="flex flex-wrap gap-1 mt-0.5">
+              {uniqueCharacters.map((c) => (
+                <span key={c} className="text-[12px] px-1.5 py-0.5 rounded-sm border border-ivy-rule">
+                  {c}
+                </span>
+              ))}
+            </div>
+          )}
+        </DetailField>
+      </div>
+
+      <div className="grid grid-cols-2 px-5 pb-5 gap-6">
+        <DetailField label={`Caused by (${causedByEvents.length})`}>
+          {causedByEvents.length === 0 ? (
+            <span className="text-ivy-inkFaint">No earlier beats referenced</span>
+          ) : (
+            <div className="space-y-2">
+              {causedByEvents.map((e) => (
+                <button
+                  key={e.event_id}
+                  onClick={() => onSelectEvent?.(e.event_id)}
+                  className="w-full text-left rounded-sm border border-ivy-ruleSoft px-2 py-1.5 hover:bg-ivy-bgInk"
+                >
+                  <div className="text-[12px] text-ivy-inkDeep leading-snug">{e.description}</div>
+                  <Mono className="text-[10px] text-ivy-inkFaint mt-1">
+                    {formatBeatLabel(e.order)} · {formatChapterLabel(e.chapter_num)}
+                  </Mono>
+                </button>
+              ))}
+            </div>
+          )}
+        </DetailField>
+        <DetailField label={`Leads to (${causesEvents.length})`}>
+          {causesEvents.length === 0 ? (
+            <span className="text-ivy-inkFaint">No later beats referenced</span>
+          ) : (
+            <div className="space-y-2">
+              {causesEvents.map((e) => (
+                <button
+                  key={e.event_id}
+                  onClick={() => onSelectEvent?.(e.event_id)}
+                  className="w-full text-left rounded-sm border border-ivy-ruleSoft px-2 py-1.5 hover:bg-ivy-bgInk"
+                >
+                  <div className="text-[12px] text-ivy-inkDeep leading-snug">{e.description}</div>
+                  <Mono className="text-[10px] text-ivy-inkFaint mt-1">
+                    {formatBeatLabel(e.order)} · {formatChapterLabel(e.chapter_num)}
+                  </Mono>
+                </button>
+              ))}
+            </div>
+          )}
+        </DetailField>
       </div>
     </article>
-  );
-}
-
-/* ── Legend ───────────────────────────────────────────────────── */
-function TimelineLegend() {
-  return (
-    <div className="rounded-sm p-4 border border-ivy-rule bg-ivy-bgRaised">
-      <p className="font-mono text-[10px] uppercase tracking-[0.22em] mb-3 text-ivy-inkFaint">legend</p>
-      <ul className="space-y-2 text-[12px] text-ivy-ink">
-        <li className="flex items-center gap-2.5">
-          <svg width="20" height="14"><line x1="0" y1="7" x2="20" y2="7" stroke="var(--ivy-inkDeep)" strokeWidth="1.4" /></svg>
-          <span>Spine — story order (left → right)</span>
-        </li>
-        <li className="flex items-center gap-2.5">
-          <svg width="20" height="14">
-            <line x1="10" y1="0" x2="10" y2="14" stroke="var(--ivy-inkMute)" strokeWidth="1" />
-            <circle cx="10" cy="0" r="3" fill="var(--ivy-bgRaised)" stroke="var(--ivy-inkDeep)" />
-          </svg>
-          <span>Rib length shows how tangled a beat is</span>
-        </li>
-        <li className="flex items-center gap-2.5">
-          <svg width="20" height="14">
-            <path d="M2 7 Q10 14 18 7" fill="none" stroke="var(--ivy-rule)" strokeWidth="0.8" />
-          </svg>
-          <span>Curves trace cause-and-effect links</span>
-        </li>
-        <li className="flex items-center gap-2.5">
-          <span className="inline-block h-2 w-2 rounded-full bg-ivy-accent" />
-          <span>Selected beat</span>
-        </li>
-      </ul>
-    </div>
   );
 }
 
@@ -307,7 +276,6 @@ export default function TimelineView({ events: rawEvents }: { events: TimelineEv
           )}
         </div>
         <div className="col-span-4">
-          <TimelineLegend />
           <div className="">
             <p className="font-mono text-[10px] uppercase tracking-[0.22em] mb-3 text-ivy-inkFaint">beats</p>
             <div className="space-y-2 pr-2" style={{ maxHeight: 520, overflowY: "auto" }}>
