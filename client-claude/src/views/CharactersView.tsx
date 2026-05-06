@@ -98,20 +98,20 @@ function CharacterNetwork({
   activeName: string;
   setActiveName: (n: string) => void;
 }) {
-  const W = 1100, H = 380;
+  const W = 1100, H = 500;
   const cx = W / 2, cy = H / 2;
   const maxArc = Math.max(...chars.map((c) => c.event_count), 1);
 
   const positions: Record<string, { x: number; y: number }> = {};
   chars.forEach((c, i) => {
     const angle = (i / chars.length) * Math.PI * 2 - Math.PI / 2;
-    const r = 70 + (1 - c.event_count / maxArc) * 110;
+    const r = 140 + (1 - c.event_count / maxArc) * 60;
     positions[c.name] = { x: cx + Math.cos(angle) * r, y: cy + Math.sin(angle) * r };
   });
 
   return (
     <div className="relative bg-ivy-bgInk">
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H, display: "block" }}>
+      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height: H, display: "block", overflow: "visible" }}>
         <defs>
           <pattern id="netdots" width="14" height="14" patternUnits="userSpaceOnUse">
             <circle cx="0.5" cy="0.5" r="0.5" fill="var(--ivy-rule)" />
@@ -154,18 +154,10 @@ function CharacterNetwork({
                 fill={active ? "var(--ivy-inkDeep)" : "var(--ivy-ink)"}>
                 {c.name}
               </text>
-              <text x={p.x} y={p.y + r + 26} textAnchor="middle"
-                fontSize="9" fontFamily="ui-monospace,monospace" fill="var(--ivy-inkFaint)">
-                {c.event_count} ev.
-              </text>
             </g>
           );
         })}
 
-        <text x="20" y="22" fontSize="9" fontFamily="ui-monospace,monospace"
-          fill="var(--ivy-inkFaint)" letterSpacing="1.2">
-          NODE SIZE ∝ EVENT PRESENCE  ·  EDGE WEIGHT ∝ CO-OCCURRENCE
-        </text>
       </svg>
     </div>
   );
@@ -218,23 +210,14 @@ export default function CharactersView({ events }: { events: TimelineEvent[] }) 
         subtitle="Co-occurrence graph derived from scene-level presence"
         stats={[
           { v: chars.length,                  l: "Named" },
-          { v: Object.keys(weightMap).length, l: "Edges" },
-          { v: chars[0]?.event_count ?? 0,    l: "Top arc" },
-          { v: "v0.1",                         l: "Status" },
+          { v: Object.keys(weightMap).length, l: "Connections" },
+          { v: chars[0]?.event_count ?? 0,    l: "Most active" },
         ]}
       />
 
       <div className="rounded-sm overflow-hidden mb-6 border border-ivy-rule bg-ivy-bgRaised">
-        <div className="px-5 py-3 flex items-center justify-between border-b border-ivy-ruleSoft">
-          <div>
-            <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-ivy-inkFaint">
-              fig. 03 · preview
-            </p>
-            <h3 className="font-serif text-[18px] text-ivy-inkDeep">Network preview</h3>
-          </div>
-          <span className="font-mono text-[10px] uppercase tracking-[0.18em] px-2 py-1 rounded-sm border border-ivy-rule text-ivy-inkMute">
-            force-layout · planned for v1.0
-          </span>
+        <div className="px-5 py-3 border-b border-ivy-ruleSoft">
+          <h3 className="font-serif text-[18px] text-ivy-inkDeep">Character network</h3>
         </div>
         <CharacterNetwork
           chars={chars}
