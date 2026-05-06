@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isTerminalJobStatus, type Job } from "@/types/graph";
+import { API_BASE } from "@/lib/apiBase";
 
 const POLL_MS = 3000;
 
@@ -19,7 +20,7 @@ export function useJobPolling(jobId: string): UseJobPollingResult {
 
   const fetchJob = useCallback(async () => {
     try {
-      const res = await fetch(`/api/jobs/${jobId}`);
+      const res = await fetch(`${API_BASE}/api/jobs/${jobId}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = (await res.json()) as Job;
       if (!mountedRef.current) return;

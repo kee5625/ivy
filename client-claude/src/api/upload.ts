@@ -1,3 +1,5 @@
+import { API_BASE } from "@/lib/apiBase";
+
 type PresignResponse = { presigned_url: string; object_key: string };
 type DirectUploadResult = { objectKey: string };
 type CreateJobResponse = { job_id: string };
@@ -9,7 +11,7 @@ function ensurePdf(file: File): void {
 }
 
 async function requestPresignedUrl(file: File): Promise<PresignResponse> {
-  const res = await fetch("/api/upload/presign", {
+  const res = await fetch(`${API_BASE}/api/upload/presign`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ filename: file.name, content_type: file.type || "application/pdf", size: file.size }),
@@ -34,7 +36,7 @@ export async function uploadPdfDirectToR2(file: File): Promise<DirectUploadResul
 }
 
 export async function createJob(filename: string, objectKey: string): Promise<string> {
-  const res = await fetch("/api/jobs", {
+  const res = await fetch(`${API_BASE}/api/jobs`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ filename, object_key: objectKey }),

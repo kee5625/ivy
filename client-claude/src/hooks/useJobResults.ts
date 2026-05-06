@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Chapter, Job, PlotHole, TimelineEvent } from "@/types/graph";
+import { API_BASE } from "@/lib/apiBase";
 
 export type UseJobResultsResult = {
   job: Job | null;
@@ -38,10 +39,10 @@ export function useJobResults(jobId: string): UseJobResultsResult {
       setIsLoading(true);
       try {
         const [jobData, chapData, timeData, holeData] = await Promise.all([
-          fetchJson<Job>(`/api/jobs/${jobId}`),
-          fetchJson<{ chapters: Chapter[] }>(`/api/jobs/${jobId}/chapters`),
-          fetchJson<{ timeline_events: TimelineEvent[] }>(`/api/jobs/${jobId}/timeline`),
-          fetchJson<{ plot_holes: PlotHole[] }>(`/api/jobs/${jobId}/plot-holes`),
+          fetchJson<Job>(`${API_BASE}/api/jobs/${jobId}`),
+          fetchJson<{ chapters: Chapter[] }>(`${API_BASE}/api/jobs/${jobId}/chapters`),
+          fetchJson<{ timeline_events: TimelineEvent[] }>(`${API_BASE}/api/jobs/${jobId}/timeline`),
+          fetchJson<{ plot_holes: PlotHole[] }>(`${API_BASE}/api/jobs/${jobId}/plot-holes`),
         ]);
         if (!active) return;
         setJob(jobData);
