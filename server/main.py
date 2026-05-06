@@ -1,11 +1,13 @@
 import logging
 import logging.config
+import os
 import uvicorn
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 _env_path = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(_env_path, override=True)
@@ -52,6 +54,14 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     app = FastAPI(title="ivy", lifespan=lifespan)
+    origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     app.include_router(router, prefix="/api")
     return app
 
