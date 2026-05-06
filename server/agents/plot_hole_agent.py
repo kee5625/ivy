@@ -25,16 +25,20 @@ from utils.job import set_job_status
 logger = logging.getLogger(__name__)
 
 _SUPPORTED_HOLE_TYPES = {
-    "timeline_paradox",
-    "location_conflict",
-    "dead_character_speaks",
-    "unresolved_setup",
+    "timeline_paradox",       # chronology or causality contradicts itself
+    "location_conflict",      # same person/event in incompatible locations
+    "dead_character_speaks",  # character active after established absence/death
+    "unresolved_setup",       # explicit setup never paid off
+    "factual_error",          # real-world fact contradicted (biology, math, physics)
+    "character_inconsistency", # character acts against established knowledge or traits
+    "logic_gap",              # story logic breaks (easy solutions ignored, motivations absent)
+    "world_inconsistency",    # established world rule violated without explanation
 }
 _SUPPORTED_SEVERITIES = {"high", "medium", "low"}
-_CONFIDENCE_THRESHOLD = 0.72
+_CONFIDENCE_THRESHOLD = 0.45
 _MAX_RETRIES = 3
 _RETRY_BASE_DELAY = 2.0
-_MAX_FINDINGS = 5
+_MAX_FINDINGS = 15
 _MAX_CHAPTERS_FOR_PROMPT = 200
 _MAX_TIMELINE_EVENTS_FOR_PROMPT = 120
 _MAX_SUMMARY_ITEMS = 3
@@ -51,6 +55,7 @@ _MAX_LOCATION_CHARS = 60
 _MAX_TIME_REFERENCE_CHARS = 60
 _MAX_ENTITY_NAME_CHARS = 60
 _MAX_ENTITY_COUNT = 80
+_MAX_RAW_TEXT_EXCERPT_CHARS = 1200   # per chapter, passed verbatim to LLM
 
 _RATE_LIMIT_PATTERN = re.compile(r"try again in ([0-9]+(?:\.[0-9]+)?)s", re.IGNORECASE)
 
@@ -134,6 +139,7 @@ def _build_story_end_payload(story_state: dict[str, Any]) -> dict[str, Any]:
 
 def _build_chapter_payload(chapter: dict[str, Any]) -> dict[str, Any]:
     summary_items = _clean_string_list(chapter.get("summary"), limit=_MAX_SUMMARY_ITEMS)
+    raw_text = str(chapter.get("raw_text") or "").strip()
     return {
         "chapter_num": int(chapter.get("chapter_num", 0)),
         "chapter_title": _trim_text(
@@ -153,6 +159,10 @@ def _build_chapter_payload(chapter: dict[str, Any]) -> dict[str, Any]:
         "temporal_markers": _clean_string_list(
             chapter.get("temporal_markers"), limit=_MAX_TEMPORAL_MARKERS
         ),
+        # Raw excerpt gives the LLM actual quoted text to spot specific factual errors,
+        # prices, physical descriptions, and other detail-level inconsistencies that
+        # bullet-point summaries cannot capture.
+        "raw_text_excerpt": raw_text[:_MAX_RAW_TEXT_EXCERPT_CHARS] if raw_text else None,
     }
 
 
