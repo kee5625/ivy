@@ -75,10 +75,6 @@ function TriageMatrix({
             {isActive && <circle cx={x} cy={y} r="13" fill="none" stroke={c} strokeWidth="1" opacity="0.4" />}
             <circle cx={x} cy={y} r={isActive ? 7 : 5}
               fill={isActive ? c : "var(--ivy-bgRaised)"} stroke={c} strokeWidth="1.4" />
-            <text x={x + 10} y={y + 3} fontSize="9" fontFamily="ui-monospace,monospace"
-              fill={isActive ? "var(--ivy-inkDeep)" : "var(--ivy-inkMute)"}>
-              {h.hole_id}
-            </text>
           </g>
         );
       })}
@@ -122,7 +118,7 @@ function ChapterHeatmap({
                     <button
                       key={h.hole_id}
                       onClick={() => setActiveId(h.hole_id)}
-                      title={`${h.hole_id} · ${h.hole_type}`}
+                      title={h.hole_type}
                       style={{
                         height: 14,
                         background: c,
@@ -166,9 +162,6 @@ function IssueDetail({ hole, events }: { hole: PlotHole; events: TimelineEvent[]
     <article className="rounded-sm border border-ivy-rule bg-ivy-bgRaised">
       <div className="px-5 py-4 border-b border-ivy-ruleSoft">
         <div className="flex items-center gap-2 mb-2">
-          <Mono className="text-[11px] px-1.5 py-0.5 rounded-sm bg-ivy-accentSoft text-ivy-accentInk">
-            {hole.hole_id}
-          </Mono>
           <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-ivy-inkFaint">
             {hole.hole_type}
           </span>
@@ -210,12 +203,8 @@ function IssueDetail({ hole, events }: { hole: PlotHole; events: TimelineEvent[]
           </p>
           <ul className="space-y-2.5">
             {involved.map((e) => (
-              <li key={e.event_id} className="grid gap-3 text-[13px]"
-                style={{ gridTemplateColumns: "60px minmax(0,1fr)" }}>
-                <div>
-                  <Mono className="text-[11px] text-ivy-accent">{e.event_id}</Mono>
-                  <p className="font-mono text-[10px] text-ivy-inkFaint">ch.{e.chapter_num}</p>
-                </div>
+              <li key={e.event_id} className="flex gap-3 text-[13px]">
+                <span className="font-mono text-[10px] text-ivy-inkFaint shrink-0 mt-0.5">ch.{e.chapter_num}</span>
                 <p className="text-ivy-ink">{e.description}</p>
               </li>
             ))}
@@ -308,9 +297,9 @@ export default function IssuesView({
           <div className="mt-6 rounded-sm border border-ivy-rule bg-ivy-bgRaised">
             <div
               className="grid items-center gap-3 px-5 py-2.5 text-[10px] font-mono uppercase tracking-[0.18em] text-ivy-inkFaint border-b border-ivy-rule"
-              style={{ gridTemplateColumns: "44px minmax(0,1fr) 120px 70px 70px 24px" }}
+              style={{ gridTemplateColumns: "minmax(0,1fr) 120px 70px 70px 24px" }}
             >
-              <span>id</span><span>type</span><span>severity</span>
+              <span>type</span><span>severity</span>
               <span className="text-right">conf.</span><span className="text-right">ch.</span><span />
             </div>
             {holes.map((h, i) => (
@@ -319,17 +308,11 @@ export default function IssuesView({
                 onClick={() => setActiveId(h.hole_id)}
                 className="grid items-center gap-3 w-full px-5 py-3 text-left"
                 style={{
-                  gridTemplateColumns: "44px minmax(0,1fr) 120px 70px 70px 24px",
+                  gridTemplateColumns: "minmax(0,1fr) 120px 70px 70px 24px",
                   borderBottom: i < holes.length - 1 ? "1px solid var(--ivy-ruleSoft)" : "none",
                   background: activeId === h.hole_id ? "var(--ivy-bgInk)" : "transparent",
                 }}
               >
-                <Mono
-                  className="text-[11px]"
-                  style={{ color: activeId === h.hole_id ? "var(--ivy-accent)" : "var(--ivy-inkMute)" }}
-                >
-                  {h.hole_id}
-                </Mono>
                 <span className="text-[13px] truncate text-ivy-inkDeep">{h.hole_type}</span>
                 <span className="flex items-center gap-1.5 text-[12px] text-ivy-ink">
                   <SevDot level={h.severity} /> {h.severity}
