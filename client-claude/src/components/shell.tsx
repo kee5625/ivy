@@ -1,3 +1,4 @@
+import type { ComponentType } from "react";
 import { Hairline } from "@/components/atoms";
 import {
   IconLibrary,
@@ -11,7 +12,7 @@ import type { Job } from "@/types/graph";
 /* ── Nav items ───────────────────────────────────────────────── */
 export type ViewKey = "library" | "manuscript" | "timeline" | "issues" | "characters";
 
-const NAV: { key: ViewKey; label: string; Icon: React.ComponentType }[] = [
+const NAV: { key: ViewKey; label: string; Icon: ComponentType }[] = [
   { key: "library",    label: "Library",    Icon: IconLibrary },
   { key: "manuscript", label: "Manuscript", Icon: IconManuscript },
   { key: "timeline",   label: "Timeline",   Icon: IconTimeline },

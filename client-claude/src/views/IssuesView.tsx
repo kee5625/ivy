@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { Mono, ViewHeader } from "@/components/atoms";
-import { SevDot } from "@/components/atoms";
+import { Mono, SevDot, ViewHeader } from "@/components/atoms";
 import { IconArrowRight } from "@/components/icons";
 import type { PlotHole, TimelineEvent } from "@/types/graph";
 

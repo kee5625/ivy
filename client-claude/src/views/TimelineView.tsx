@@ -221,8 +221,6 @@ export default function TimelineView({ events: rawEvents }: { events: TimelineEv
     return { ...e, x, y, above, ribLen };
   });
 
-  const idToPt = Object.fromEntries(layout.map((p) => [p.event_id, p]));
-
   const years = Array.from(
     new Set(events.map((e) => e.inferred_year).filter(Boolean))
   ).sort() as number[];

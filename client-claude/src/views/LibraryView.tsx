@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type DragEvent, type ChangeEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { uploadPdfDirectToR2, createJob } from "@/api/upload";
 import { IconUpload, IconArrowRight } from "@/components/icons";
@@ -130,14 +130,14 @@ export default function LibraryView() {
     }
   }
 
-  function onDrop(e: React.DragEvent) {
+  function onDrop(e: DragEvent) {
     e.preventDefault();
     setDrag(false);
     const file = e.dataTransfer.files[0];
     if (file) void handleFile(file);
   }
 
-  function onInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+  function onInputChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (file) void handleFile(file);
   }
