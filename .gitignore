@@ -14,6 +14,7 @@ venv/
 /out
 *.tsbuildinfo
 next-env.d.ts
+.vite/
 
 # Environment
 .env
